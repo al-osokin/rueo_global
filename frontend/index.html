@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Rueo.ru • Поиск</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        font-family: "Segoe UI", system-ui, sans-serif;
+      }
+      body {
+        margin: 0;
+        padding: 0;
+        background: #f1f5f9;
+        color: #111;
+      }
+      header {
+        background: #0f172a;
+        color: #fff;
+        padding: 1.5rem 2rem;
+      }
+      header h1 {
+        margin: 0 0 0.3rem;
+        font-size: 1.8rem;
+      }
+      header p {
+        margin: 0;
+        max-width: 48rem;
+        line-height: 1.5;
+        color: rgba(255, 255, 255, 0.85);
+      }
+      main {
+        max-width: 960px;
+        margin: 0 auto;
+        padding: 2rem 1.5rem 3rem;
+      }
+      form {
+        display: flex;
+        gap: 0.75rem;
+        margin-bottom: 1rem;
+      }
+      input[type="text"] {
+        flex: 1;
+        padding: 0.75rem 1rem;
+        border: 1px solid #cbd5f5;
+        border-radius: 0.75rem;
+        font-size: 1rem;
+      }
+      button {
+        padding: 0.75rem 1.5rem;
+        border: none;
+        border-radius: 0.75rem;
+        background: #2563eb;
+        color: white;
+        font-size: 1rem;
+        cursor: pointer;
+      }
+      button:disabled {
+        opacity: 0.6;
+        cursor: progress;
+      }
+      .card {
+        background: white;
+        border-radius: 1rem;
+        padding: 1.5rem;
+        box-shadow: 0 10px 24px rgba(15, 23, 42, 0.1);
+        margin-bottom: 1.5rem;
+      }
+      .muted {
+        color: #475569;
+        font-size: 0.95rem;
+        line-height: 1.5;
+        white-space: pre-line;
+      }
+      #results h2 {
+        margin: 0;
+        font-size: 1.1rem;
+        color: #1e293b;
+      }
+      #results-count {
+        color: #334155;
+        margin-bottom: 1rem;
+      }
+      .result-body {
+        font-size: 1rem;
+        line-height: 1.6;
+        margin-top: 1rem;
+      }
+      .result-body div {
+        font-family: "Noto Serif", "Times New Roman", serif;
+      }
+      footer {
+        text-align: center;
+        padding: 1.5rem 0 2.5rem;
+        color: #64748b;
+        font-size: 0.9rem;
+      }
+      @media (max-width: 640px) {
+        form {
+          flex-direction: column;
+        }
+        button {
+          width: 100%;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>Большие словари Rueo.ru</h1>
+      <p>
+        Новый бэкенд на FastAPI. Введите слово на эсперанто или русском языке — система
+        автоматически выберет подходящий словарь и отдаст HTML-статью, как на старом
+        сайте.
+      </p>
+    </header>
+    <main>
+      <section class="card">
+        <form id="search-form">
+          <input
+            type="text"
+            id="search-input"
+            name="query"
+            placeholder="Введите слово…"
+            autocomplete="off"
+            required
+          />
+          <button type="submit" id="search-button">Найти</button>
+        </form>
+        <div id="results-count" class="muted"></div>
+        <div id="results"></div>
+      </section>
+
+      <section class="card">
+        <h2 style="margin-top: 0">Статус обновлений</h2>
+        <p id="status-text" class="muted">Загружаем информацию…</p>
+        <p class="muted">
+          <a href="/admin/ui">Администрирование</a> ·
+          <a href="https://old.rueo.ru/sercxo.php" target="_blank" rel="noopener"
+            >Старый интерфейс</a
+          >
+        </p>
+      </section>
+    </main>
+    <footer>&copy; Rueo.ru, 2024</footer>
+
+    <script>
+      const form = document.getElementById("search-form");
+      const input = document.getElementById("search-input");
+      const button = document.getElementById("search-button");
+      const resultCount = document.getElementById("results-count");
+      const results = document.getElementById("results");
+      const statusText = document.getElementById("status-text");
+
+      async function fetchStatus() {
+        try {
+          const res = await fetch("/status/info");
+          if (!res.ok) throw new Error("Не удалось получить статус.");
+          const data = await res.json();
+          statusText.textContent = data.text;
+        } catch (err) {
+          statusText.textContent = "Нет данных об обновлении.";
+        }
+      }
+
+      form.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        const query = input.value.trim();
+        if (!query) {
+          resultCount.textContent = "Введите слово, чтобы начать поиск.";
+          return;
+        }
+        button.disabled = true;
+        resultCount.textContent = "Выполняем поиск…";
+        results.innerHTML = "";
+        try {
+          const response = await fetch(`/search?query=${encodeURIComponent(query)}`);
+          if (!response.ok) throw new Error("Ошибка поиска");
+          const data = await response.json();
+          resultCount.textContent =
+            data.count > 0
+              ? `Найдено статей: ${data.count}`
+              : "Подходящих словарных статей не найдено.";
+          results.innerHTML = `<div class="result-body">${data.html || ""}</div>`;
+        } catch (error) {
+          resultCount.textContent = "Произошла ошибка. Попробуйте ещё раз.";
+        } finally {
+          button.disabled = false;
+        }
+      });
+
+      fetchStatus();
+    </script>
+  </body>
+</html>

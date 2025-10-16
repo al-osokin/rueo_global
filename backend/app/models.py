@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import DateTime, Enum, Index, Integer, String, Text, func
+from sqlalchemy import DateTime, Enum, Index, Integer, String, Text, func, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database import Base
@@ -89,3 +89,15 @@ class SearchStat(Base):
     vorto: Mapped[str | None] = mapped_column(String(255))
     dato: Mapped[datetime | None] = mapped_column(DateTime(timezone=False))
     hip: Mapped[str | None] = mapped_column(String(45))
+
+
+class User(Base):
+    __tablename__ = "users"
+    __table_args__ = (UniqueConstraint("username", name="uq_users_username"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    username: Mapped[str] = mapped_column(String(150), nullable=False)
+    password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=False), nullable=False, server_default=func.now()
+    )

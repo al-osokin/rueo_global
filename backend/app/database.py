@@ -1,8 +1,9 @@
+import hashlib
 import os
 from functools import lru_cache
 from typing import Iterator
 
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, select
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, declarative_base, sessionmaker
 
@@ -54,3 +55,26 @@ def init_db() -> None:
     from app import models  # noqa: F401
 
     Base.metadata.create_all(bind=engine)
+    _ensure_default_admin()
+
+
+def _ensure_default_admin() -> None:
+    from app.models import User
+
+    with SessionLocal() as session:
+        existing = session.execute(
+            select(User).where(User.username == "osokin")
+        ).scalar_one_or_none()
+        if existing:
+            return
+
+        user = User(
+            username="osokin",
+            password_hash=_hash_password("40362151"),
+        )
+        session.add(user)
+        session.commit()
+
+
+def _hash_password(raw: str) -> str:
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()

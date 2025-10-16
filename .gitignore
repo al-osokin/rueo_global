@@ -152,3 +152,4 @@ docker-compose.override.yml
 slovari_vortaro.sql
 postgres_data/
 References/
+backend/data/

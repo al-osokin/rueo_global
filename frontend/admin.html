@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Rueo.ru • Администрирование</title>
+    <style>
+      :root {
+        font-family: "Segoe UI", system-ui, sans-serif;
+        color-scheme: light dark;
+      }
+      body {
+        margin: 0;
+        background: #0f172a;
+        color: #f8fafc;
+        min-height: 100vh;
+      }
+      main {
+        max-width: 960px;
+        margin: 0 auto;
+        padding: 3rem 1.5rem 4rem;
+      }
+      .card {
+        background: rgba(15, 23, 42, 0.85);
+        border-radius: 1.25rem;
+        padding: 2rem;
+        box-shadow: 0 20px 40px rgba(15, 23, 42, 0.6);
+      }
+      h1 {
+        margin-top: 0;
+        font-size: 2rem;
+      }
+      p {
+        color: rgba(226, 232, 240, 0.85);
+        line-height: 1.6;
+      }
+      label {
+        display: block;
+        margin-bottom: 0.4rem;
+        font-weight: 600;
+        color: rgba(226, 232, 240, 0.8);
+      }
+      input[type="text"] {
+        width: 100%;
+        padding: 0.75rem 1rem;
+        border-radius: 0.9rem;
+        border: 1px solid rgba(148, 163, 184, 0.4);
+        background: rgba(15, 23, 42, 0.9);
+        color: #e2e8f0;
+        margin-bottom: 1.5rem;
+      }
+      .controls {
+        display: flex;
+        gap: 1rem;
+        flex-wrap: wrap;
+        margin-bottom: 1.5rem;
+      }
+      button {
+        padding: 0.9rem 1.8rem;
+        border-radius: 0.9rem;
+        border: none;
+        font-size: 1rem;
+        font-weight: 600;
+        cursor: pointer;
+      }
+      button.primary {
+        background: #38bdf8;
+        color: #0f172a;
+      }
+      button.secondary {
+        background: rgba(226, 232, 240, 0.15);
+        color: #f8fafc;
+      }
+      button:disabled {
+        opacity: 0.5;
+        cursor: progress;
+      }
+      pre {
+        background: rgba(15, 23, 42, 0.65);
+        border-radius: 0.9rem;
+        padding: 1rem 1.25rem;
+        overflow-x: auto;
+        line-height: 1.5;
+        color: #bae6fd;
+      }
+      a {
+        color: #38bdf8;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <div class="card">
+        <h1>Администрирование Rueo.ru</h1>
+        <p>
+          Отсюда можно запускать импорт исходных файлов, чтобы обновить базу данных и
+          поисковые индексы. О прогрессе пишет служебный лог бэкенда.
+        </p>
+
+        <label for="data-dir">Каталог с исходниками</label>
+        <input
+          type="text"
+          id="data-dir"
+          value=""
+          placeholder="Оставьте пустым, чтобы использовать путь по умолчанию"
+        />
+
+        <div class="controls">
+          <button class="primary" id="run-import">Запустить импорт</button>
+          <button class="secondary" id="refresh-status">Обновить статус</button>
+          <a href="/" style="align-self: center">← Вернуться к поиску</a>
+        </div>
+
+        <h2>Состояние</h2>
+        <pre id="status">Загрузка статуса…</pre>
+      </div>
+    </main>
+
+    <script>
+      const runButton = document.getElementById("run-import");
+      const refreshButton = document.getElementById("refresh-status");
+      const statusBlock = document.getElementById("status");
+      const dataDirInput = document.getElementById("data-dir");
+
+      async function fetchStatus() {
+        try {
+          const res = await fetch("/admin/import/status");
+          if (!res.ok) throw new Error("Не удалось получить статус");
+          const data = await res.json();
+          statusBlock.textContent = JSON.stringify(data, null, 2);
+        } catch (error) {
+          statusBlock.textContent = "Ошибка загрузки статуса: " + error.message;
+        }
+      }
+
+      async function triggerImport() {
+        runButton.disabled = true;
+        const payload = {};
+        const customDir = dataDirInput.value.trim();
+        if (customDir) payload.data_dir = customDir;
+        try {
+          const res = await fetch("/admin/import", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+          });
+          if (!res.ok) {
+            const detail = await res.json().catch(() => ({}));
+            throw new Error(detail.detail || "Импорт не запущен");
+          }
+          const status = await res.json();
+          statusBlock.textContent =
+            "Импорт запущен.\n\n" + JSON.stringify(status, null, 2);
+        } catch (error) {
+          statusBlock.textContent = "Ошибка запуска: " + error.message;
+        } finally {
+          runButton.disabled = false;
+        }
+      }
+
+      runButton.addEventListener("click", triggerImport);
+      refreshButton.addEventListener("click", fetchStatus);
+      fetchStatus();
+    </script>
+  </body>
+</html>

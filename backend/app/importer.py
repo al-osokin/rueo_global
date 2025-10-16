@@ -19,6 +19,9 @@ from app.models import (
     SearchEntryRu,
 )
 
+BASE_DIR = Path(__file__).resolve().parent.parent
+DEFAULT_DATA_DIR = (BASE_DIR / "data/src").resolve()
+
 LOGGER = logging.getLogger(__name__)
 
 LANG_DIRS = {
@@ -35,6 +38,7 @@ HEADER_PATTERN = re.compile(r"^\[(.+?)\]", re.MULTILINE | re.DOTALL)
 
 
 def run_import(data_dir: Path, truncate: bool = True) -> None:
+    data_dir = data_dir.resolve()
     init_db()
     with SessionLocal() as session:
         if truncate:
@@ -60,6 +64,14 @@ def run_import(data_dir: Path, truncate: bool = True) -> None:
         fuzzy_count = _update_neklaraj(session, "sercxo")
         LOGGER.info("Inserted %d fuzzy entries", fuzzy_count)
         session.commit()
+
+        _write_status_file(
+            data_dir,
+            eo_words=eo_words,
+            eo_articles=eo_count,
+            ru_words=ru_words,
+            ru_articles=ru_count,
+        )
 
 
 def _truncate_tables(session: Session) -> None:
@@ -314,6 +326,26 @@ def _update_neklaraj(session: Session, table_name: str) -> int:
     return inserted
 
 
+def _write_status_file(
+    data_dir: Path,
+    eo_words: int,
+    eo_articles: int,
+    ru_words: int,
+    ru_articles: int,
+) -> None:
+    base_dir = data_dir
+    if base_dir.name == "src":
+        base_dir = base_dir.parent
+    tekstoj_dir = base_dir / "tekstoj"
+    tekstoj_dir.mkdir(parents=True, exist_ok=True)
+    content = (
+        "Открыты для поиска:\n"
+        f"большой эсперанто-русский словарь в актуальной редакции, {eo_words} cлова в {eo_articles} словарных статьях;\n"
+        f"рабочие материалы большого русско-эсперантского словаря (диапазон А — прегрешить), {ru_words} cлов в {ru_articles} словарных статьях."
+    )
+    (tekstoj_dir / "klarigo.textile").write_text(content, encoding="utf-8")
+
+
 def parse_args(argv: Iterable[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Импорт словарных данных в PostgreSQL."
@@ -321,7 +353,7 @@ def parse_args(argv: Iterable[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--data-dir",
         type=Path,
-        default=Path("References/base_update/src"),
+        default=DEFAULT_DATA_DIR,
         help="Каталог с ежедневными выгрузками (default: %(default)s)",
     )
     parser.add_argument(

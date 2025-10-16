@@ -7,16 +7,13 @@ from typing import Optional
 from fastapi import APIRouter, BackgroundTasks, HTTPException, status
 from pydantic import BaseModel, Field
 
-from app.importer import run_import
-
-
-DEFAULT_DATA_DIR = Path("References/base_update/src")
+from app.importer import DEFAULT_DATA_DIR, run_import
 
 
 class ImportRequest(BaseModel):
     data_dir: Optional[Path] = Field(
         default=None,
-        description="Каталог с исходниками. По умолчанию References/base_update/src.",
+        description="Каталог с исходниками. По умолчанию backend/data/src.",
     )
     truncate: bool = Field(
         default=True,
