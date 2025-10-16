@@ -104,6 +104,14 @@
           placeholder="Оставьте пустым, чтобы использовать путь по умолчанию"
         />
 
+        <label for="last-letter">Последнее готовое слово (Ру→Эо)</label>
+        <input
+          type="text"
+          id="last-letter"
+          value=""
+          placeholder="Прегрешить"
+        />
+
         <div class="controls">
           <button class="primary" id="run-import">Запустить импорт</button>
           <button class="secondary" id="refresh-status">Обновить статус</button>
@@ -111,6 +119,9 @@
         </div>
 
         <h2>Состояние</h2>
+        <p id="progress-line" style="color: #f8fafc; font-weight: 500;">
+          Импорт не выполняется.
+        </p>
         <pre id="status">Загрузка статуса…</pre>
       </div>
     </main>
@@ -120,6 +131,46 @@
       const refreshButton = document.getElementById("refresh-status");
       const statusBlock = document.getElementById("status");
       const dataDirInput = document.getElementById("data-dir");
+      const lastLetterInput = document.getElementById("last-letter");
+      const progressLine = document.getElementById("progress-line");
+
+      function describeProgress(progress) {
+        if (!progress) {
+          return "Импорт не выполняется.";
+        }
+        const { stage, message, lang, current, total, filename, inserted, phase } = progress;
+        switch (stage) {
+          case "initializing":
+            return "Подготовка к импорту…";
+          case "truncating":
+            return "Очистка таблиц перед загрузкой…";
+          case "processing_files": {
+            const prefix = lang === "eo" ? "Эсперанто" : "Русско-эсперантский";
+            const totalText = total ? `${current}/${total}` : `${current}`;
+            const fileText = filename ? ` (файл: ${filename})` : "";
+            const insertedText = inserted ? `, записей: ${inserted}` : "";
+            return `${prefix}: обработка файлов ${totalText}${fileText}${insertedText}`;
+          }
+          case "building_index": {
+            const prefix = lang === "eo" ? "Эсперанто" : "Русско-эсперантский";
+            const totalText = total ? `${current}/${total}` : `${current}`;
+            return `${prefix}: построение поискового индекса ${totalText}`;
+          }
+          case "updating_fuzzy": {
+            const phaseText = phase === "exclamation" ? "восклицательных форм" : "слов с дефисами";
+            const countText = progress.count != null ? progress.count : "";
+            return `Обновление нечёткого поиска (${phaseText}) ${countText}`;
+          }
+          case "finalizing":
+            return "Запись служебных файлов…";
+          case "completed":
+            return "Импорт завершён.";
+          case "error":
+            return `Ошибка: ${message || "неизвестная"}`;
+          default:
+            return message || "Выполняется импорт…";
+        }
+      }
 
       async function fetchStatus() {
         try {
@@ -127,16 +178,27 @@
           if (!res.ok) throw new Error("Не удалось получить статус");
           const data = await res.json();
           statusBlock.textContent = JSON.stringify(data, null, 2);
+          progressLine.textContent = describeProgress(data.progress);
+          if (data.last_ru_letter) {
+            lastLetterInput.value = data.last_ru_letter;
+            lastLetterInput.placeholder = data.last_ru_letter;
+          }
+          runButton.disabled = Boolean(data.running);
+          runButton.textContent = data.running ? "Импорт выполняется…" : "Запустить импорт";
         } catch (error) {
           statusBlock.textContent = "Ошибка загрузки статуса: " + error.message;
+          progressLine.textContent = "Не удалось получить статус.";
         }
       }
 
       async function triggerImport() {
         runButton.disabled = true;
+        progressLine.textContent = "Запуск импорта…";
         const payload = {};
         const customDir = dataDirInput.value.trim();
         if (customDir) payload.data_dir = customDir;
+        const lastLetter = lastLetterInput.value.trim();
+        if (lastLetter) payload.last_ru_letter = lastLetter;
         try {
           const res = await fetch("/admin/import", {
             method: "POST",
@@ -150,10 +212,18 @@
           const status = await res.json();
           statusBlock.textContent =
             "Импорт запущен.\n\n" + JSON.stringify(status, null, 2);
+          progressLine.textContent = describeProgress(status.progress);
+          if (status.last_ru_letter) {
+            lastLetterInput.value = status.last_ru_letter;
+            lastLetterInput.placeholder = status.last_ru_letter;
+          }
+          runButton.disabled = true;
+          runButton.textContent = "Импорт выполняется…";
         } catch (error) {
           statusBlock.textContent = "Ошибка запуска: " + error.message;
+          progressLine.textContent = "Произошла ошибка при запуске импорта.";
         } finally {
-          runButton.disabled = false;
+          setTimeout(fetchStatus, 500);
         }
       }
 

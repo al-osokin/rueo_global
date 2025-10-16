@@ -5,9 +5,9 @@ import logging
 import re
 from collections import OrderedDict
 from pathlib import Path
-from typing import Iterable, List, Sequence
+from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence, Tuple
 
-from sqlalchemy import insert, select, text
+from sqlalchemy import func, insert, select, text
 from sqlalchemy.orm import Session
 
 from app.database import SessionLocal, init_db
@@ -22,6 +22,8 @@ from app.models import (
 BASE_DIR = Path(__file__).resolve().parent.parent
 DEFAULT_DATA_DIR = (BASE_DIR / "data/src").resolve()
 
+ProgressCallback = Callable[[Dict[str, Any]], None]
+
 LOGGER = logging.getLogger(__name__)
 
 LANG_DIRS = {
@@ -30,48 +32,101 @@ LANG_DIRS = {
 }
 
 ARTICLE_PATTERN = re.compile(
-    r"(?P<redaktoroj>^\d\.[^\[]*)(?P<vorto>.*?)\r\n\s*\r\n",
+    r"(?P<redaktoroj>^\d.[^\[]*)(?P<vorto>.*?)(?:\r?\n)\s*(?:\r?\n)",
     re.MULTILINE | re.DOTALL,
 )
 
 HEADER_PATTERN = re.compile(r"^\[(.+?)\]", re.MULTILINE | re.DOTALL)
 
 
-def run_import(data_dir: Path, truncate: bool = True) -> None:
+def _make_notifier(callback: Optional[ProgressCallback]) -> ProgressCallback:
+    def _notify(stage: str, **payload: Any) -> None:
+        if callback:
+            callback({"stage": stage, **payload})
+
+    return _notify
+
+
+def run_import(
+    data_dir: Path,
+    truncate: bool = True,
+    status_callback: Optional[ProgressCallback] = None,
+    last_ru_letter: Optional[str] = None,
+) -> None:
     data_dir = data_dir.resolve()
     init_db()
+
+    notify = _make_notifier(status_callback)
+    notify("initializing", message="Старт импорта данных")
+
     with SessionLocal() as session:
         if truncate:
+            notify("truncating", message="Очистка таблиц перед загрузкой")
             _truncate_tables(session)
 
         LOGGER.info("Processing Esperanto data…")
-        eo_count = _process_language(session, data_dir, "eo")
+        notify("processing_files", lang="eo", current=0, total=0, message="Начало обработки файлов")
+        eo_count = _process_language(
+            session,
+            data_dir,
+            "eo",
+            progress_callback=lambda update: notify(
+                "processing_files", lang="eo", **update
+            ),
+        )
         LOGGER.info("Inserted %d Esperanto articles", eo_count)
         LOGGER.info("Processing Russian data…")
-        ru_count = _process_language(session, data_dir, "ru")
+        notify("processing_files", lang="ru", current=0, total=0, message="Начало обработки файлов")
+        ru_count = _process_language(
+            session,
+            data_dir,
+            "ru",
+            progress_callback=lambda update: notify(
+                "processing_files", lang="ru", **update
+            ),
+        )
         LOGGER.info("Inserted %d Russian articles", ru_count)
         session.commit()
 
         LOGGER.info("Building search indices for Esperanto…")
-        eo_words = _create_index_table(session, "eo")
+        notify("building_index", lang="eo", current=0, total=0, message="Создание поисковых индексов")
+        eo_words = _create_index_table(
+            session,
+            "eo",
+            progress_callback=lambda update: notify(
+                "building_index", lang="eo", **update
+            ),
+        )
         LOGGER.info("Inserted %d Esperanto search entries", eo_words)
         LOGGER.info("Building search indices for Russian…")
-        ru_words = _create_index_table(session, "ru")
+        notify("building_index", lang="ru", current=0, total=0, message="Создание поисковых индексов")
+        ru_words = _create_index_table(
+            session,
+            "ru",
+            progress_callback=lambda update: notify(
+                "building_index", lang="ru", **update
+            ),
+        )
         LOGGER.info("Inserted %d Russian search entries", ru_words)
         session.commit()
 
         LOGGER.info("Updating fuzzy search table…")
-        fuzzy_count = _update_neklaraj(session, "sercxo")
+        notify("updating_fuzzy", message="Обновление таблицы нечёткого поиска")
+        fuzzy_count = _update_neklaraj(
+            session,
+            "sercxo",
+            progress_callback=lambda update: notify("updating_fuzzy", **update),
+        )
         LOGGER.info("Inserted %d fuzzy entries", fuzzy_count)
         session.commit()
 
-        _write_status_file(
-            data_dir,
-            eo_words=eo_words,
-            eo_articles=eo_count,
-            ru_words=ru_words,
-            ru_articles=ru_count,
-        )
+        letter = _load_last_ru_letter(data_dir, last_ru_letter)
+        if letter:
+            _save_last_ru_letter(data_dir, letter)
+        stats = _collect_stats(session, letter)
+        notify("finalizing", message="Формирование служебных файлов", stats=stats)
+        _write_status_file(data_dir, stats)
+        notify("completed", message="Импорт завершён", stats=stats)
 
 
 def _truncate_tables(session: Session) -> None:
@@ -81,7 +136,12 @@ def _truncate_tables(session: Session) -> None:
     session.commit()
 
 
-def _process_language(session: Session, data_dir: Path, lang: str) -> int:
+def _process_language(
+    session: Session,
+    data_dir: Path,
+    lang: str,
+    progress_callback: Optional[ProgressCallback] = None,
+) -> int:
     lang_dir_name = LANG_DIRS[lang]
     lang_dir = data_dir / lang_dir_name
     if not lang_dir.exists():
@@ -95,10 +155,23 @@ def _process_language(session: Session, data_dir: Path, lang: str) -> int:
         if file_path.is_file() and file_path.suffix.lower() == ".txt"
     )
 
+    total_files = len(files)
+    if progress_callback:
+        progress_callback({"current": 0, "total": total_files})
+
     total_inserted = 0
-    for file_path in files:
+    for index, file_path in enumerate(files, start=1):
         entries = _parse_articles(file_path)
         if not entries:
+            if progress_callback:
+                progress_callback(
+                    {
+                        "current": index,
+                        "total": total_files,
+                        "filename": file_path.name,
+                        "inserted": 0,
+                    }
+                )
             continue
         insert_payload = [
             {
@@ -111,15 +184,24 @@ def _process_language(session: Session, data_dir: Path, lang: str) -> int:
         ]
         session.execute(insert(article_table), insert_payload)
         total_inserted += len(insert_payload)
+        if progress_callback:
+            progress_callback(
+                {
+                    "current": index,
+                    "total": total_files,
+                    "filename": file_path.name,
+                    "inserted": len(insert_payload),
+                }
+            )
     return total_inserted
 
 
-def _parse_articles(file_path: Path) -> List[dict[str, str | None]]:
+def _parse_articles(file_path: Path) -> List[Dict[str, Optional[str]]]:
     raw = file_path.read_bytes()
     text_cp = raw.decode("cp1251")
     text_cp += "\r\n\r\n"
 
-    entries: List[dict[str, str | None]] = []
+    entries: List[Dict[str, Optional[str]]] = []
     for match in ARTICLE_PATTERN.finditer(text_cp):
         redaktoroj = match.group("redaktoroj")
         komento = redaktoroj.replace("\r\n", ", ").rstrip(", ")
@@ -128,7 +210,11 @@ def _parse_articles(file_path: Path) -> List[dict[str, str | None]]:
     return entries
 
 
-def _create_index_table(session: Session, lang: str) -> int:
+def _create_index_table(
+    session: Session,
+    lang: str,
+    progress_callback: Optional[ProgressCallback] = None,
+) -> int:
     article_model = Article if lang == "eo" else ArticleRu
     search_table = SearchEntry.__table__ if lang == "eo" else SearchEntryRu.__table__
 
@@ -136,13 +222,21 @@ def _create_index_table(session: Session, lang: str) -> int:
         text(f"TRUNCATE TABLE {search_table.name} RESTART IDENTITY CASCADE")
     )
 
+    total_articles = session.execute(
+        select(func.count()).select_from(article_model)
+    ).scalar()
+    if total_articles is None:
+        total_articles = 0
+    if progress_callback:
+        progress_callback({"current": 0, "total": total_articles})
+
     word_count = 0
     rows = session.execute(
         select(article_model.art_id, article_model.priskribo).order_by(
             article_model.art_id
         )
     )
-    for art_id, priskribo in rows:
+    for index, (art_id, priskribo) in enumerate(rows, start=1):
         if not priskribo:
             continue
         tokens = _build_search_tokens(priskribo)
@@ -166,6 +260,10 @@ def _create_index_table(session: Session, lang: str) -> int:
                 word_count += 1
         if payload:
             session.execute(insert(search_table), payload)
+        if progress_callback and index % 200 == 0:
+            progress_callback({"current": index, "total": total_articles})
+    if progress_callback:
+        progress_callback({"current": total_articles, "total": total_articles})
     return word_count
 
 
@@ -283,7 +381,11 @@ def _unique_preserve(values: Sequence[str]) -> List[str]:
     return list(seen.keys())
 
 
-def _update_neklaraj(session: Session, table_name: str) -> int:
+def _update_neklaraj(
+    session: Session,
+    table_name: str,
+    progress_callback: Optional[ProgressCallback] = None,
+) -> int:
     session.execute(text("TRUNCATE TABLE neklaraj RESTART IDENTITY CASCADE"))
 
     fuzzy_table = FuzzyEntry.__table__
@@ -305,6 +407,11 @@ def _update_neklaraj(session: Session, table_name: str) -> int:
             [{"neklara_vorto": fuzzy, "klara_vorto": vorto}],
         )
         inserted += 1
+        if progress_callback and inserted % 100 == 0:
+            progress_callback({"count": inserted, "phase": "exclamation"})
+
+    if progress_callback:
+        progress_callback({"count": inserted, "phase": "exclamation"})
 
     hyphen_rows = session.execute(
         text(f"SELECT DISTINCT vorto FROM {table_name} WHERE vorto LIKE :pattern"),
@@ -322,31 +429,121 @@ def _update_neklaraj(session: Session, table_name: str) -> int:
             [{"neklara_vorto": fuzzy, "klara_vorto": vorto}],
         )
         inserted += 1
+        if progress_callback and inserted % 100 == 0:
+            progress_callback({"count": inserted, "phase": "hyphen"})
+
+    if progress_callback:
+        progress_callback({"count": inserted, "phase": "hyphen"})
 
     return inserted
 
 
+def _load_last_ru_letter(data_dir: Path, provided: Optional[str]) -> Optional[str]:
+    if provided:
+        return provided.strip()
+    candidate = data_dir / "last-ru-letter.txt"
+    if candidate.exists():
+        for encoding in ("cp1251", "utf-8"):
+            try:
+                return candidate.read_text(encoding=encoding).strip()
+            except UnicodeDecodeError:
+                continue
+    return None
+
+
+def get_last_ru_letter(data_dir: Path = DEFAULT_DATA_DIR) -> Optional[str]:
+    data_dir = data_dir.resolve()
+    return _load_last_ru_letter(data_dir, None)
+
+
+def _collect_stats(session: Session, last_ru_letter: Optional[str]) -> Dict[str, Dict[str, Any]]:
+    stats: Dict[str, Dict[str, Any]] = {
+        "eo": {
+            "articles": session.execute(select(func.count()).select_from(Article)).scalar() or 0,
+            "words": session.execute(select(func.count()).select_from(SearchEntry)).scalar() or 0,
+        },
+        "ru": {
+            "articles": session.execute(select(func.count()).select_from(ArticleRu)).scalar() or 0,
+            "words": session.execute(select(func.count()).select_from(SearchEntryRu)).scalar() or 0,
+        },
+    }
+
+    if last_ru_letter:
+        ready_articles, ready_words = _calculate_ru_ready(session, last_ru_letter)
+        stats["ru"]["ready_articles"] = ready_articles
+        stats["ru"]["ready_words"] = ready_words
+        stats["ru"]["ready_last_word"] = last_ru_letter
+    return stats
+
+
+def _calculate_ru_ready(session: Session, last_word: str) -> Tuple[int, int]:
+    row = session.execute(
+        select(SearchEntryRu.art_id, SearchEntryRu.id)
+        .where(SearchEntryRu.vorto.like(f"{last_word}%"))
+        .order_by(SearchEntryRu.vorto.desc())
+        .limit(1)
+    ).first()
+
+    if not row:
+        return 0, 0
+
+    art_id, row_id = row
+    # Total words up to this article
+    total_words = session.execute(
+        select(func.count()).select_from(SearchEntryRu).where(SearchEntryRu.art_id <= art_id)
+    ).scalar() or 0
+    # Words with ё should be excluded, как в оригинальном скрипте
+    yo_words = session.execute(
+        select(func.count()).select_from(SearchEntryRu).where(
+            (SearchEntryRu.art_id <= art_id) & (SearchEntryRu.vorto.like("%ё%"))
+        )
+    ).scalar() or 0
+
+    ready_words = total_words - yo_words
+    ready_articles = session.execute(
+        select(func.count()).select_from(ArticleRu).where(ArticleRu.art_id <= art_id)
+    ).scalar() or art_id
+    return ready_articles, ready_words
+
+
+def _save_last_ru_letter(data_dir: Path, last_word: str) -> None:
+    if not last_word:
+        return
+    target = data_dir / "last-ru-letter.txt"
+    target.write_text(last_word, encoding="utf-8")
+
+
 def _write_status_file(
     data_dir: Path,
-    eo_words: int,
-    eo_articles: int,
-    ru_words: int,
-    ru_articles: int,
+    stats: Dict[str, Dict[str, Any]],
 ) -> None:
     base_dir = data_dir
     if base_dir.name == "src":
         base_dir = base_dir.parent
     tekstoj_dir = base_dir / "tekstoj"
     tekstoj_dir.mkdir(parents=True, exist_ok=True)
+
+    eo_articles = stats["eo"].get("articles", 0)
+    eo_words = stats["eo"].get("words", 0)
+
+    ru_ready_articles = stats["ru"].get("ready_articles", stats["ru"].get("articles", 0))
+    ru_ready_words = stats["ru"].get("ready_words", stats["ru"].get("words", 0))
+    last_word = stats["ru"].get("ready_last_word")
+    range_text = f"диапазон А — {last_word}" if last_word else "диапазон А — …"
+
     content = (
         "Открыты для поиска:\n"
         f"большой эсперанто-русский словарь в актуальной редакции, {eo_words} cлова в {eo_articles} словарных статьях;\n"
-        f"рабочие материалы большого русско-эсперантского словаря (диапазон А — прегрешить), {ru_words} cлов в {ru_articles} словарных статьях."
+        f"рабочие материалы большого русско-эсперантского словаря ({range_text}), {ru_ready_words} cлов в {ru_ready_articles} словарных статьях."
     )
-    (tekstoj_dir / "klarigo.textile").write_text(content, encoding="utf-8")
+    klarigo_path = tekstoj_dir / "klarigo.textile"
+    try:
+        klarigo_path.write_text(content, encoding="utf-8")
+    except PermissionError as exc:
+        LOGGER.warning("Не удалось записать %s: %s", klarigo_path, exc)
 
 
-def parse_args(argv: Iterable[str] | None = None) -> argparse.Namespace:
+def parse_args(argv: Optional[Iterable[str]] = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Импорт словарных данных в PostgreSQL."
     )
@@ -366,16 +563,25 @@ def parse_args(argv: Iterable[str] | None = None) -> argparse.Namespace:
         action="store_true",
         help="Включить подробный лог.",
     )
+    parser.add_argument(
+        "--last-ru-letter",
+        type=str,
+        help="Последнее готовое слово для Ру→Эо словаря (например, прегрешить). Если не указано, берётся из last-ru-letter.txt.",
+    )
     return parser.parse_args(argv)
 
 
-def main(argv: Iterable[str] | None = None) -> None:
+def main(argv: Optional[Iterable[str]] = None) -> None:
     args = parse_args(argv)
     logging.basicConfig(
         level=logging.INFO if not args.verbose else logging.DEBUG,
         format="%(levelname)s %(message)s",
     )
-    run_import(args.data_dir, truncate=not args.no_truncate)
+    run_import(
+        args.data_dir,
+        truncate=not args.no_truncate,
+        last_ru_letter=args.last_ru_letter,
+    )
 
 
 if __name__ == "__main__":

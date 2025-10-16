@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import List, Optional, Sequence
 
-from sqlalchemy import or_, select
+from sqlalchemy import case, func, or_, select
 from sqlalchemy.orm import Session
 
 from app.models import (
@@ -153,9 +153,35 @@ class SearchService:
     def _search_rows(self, query: str, language: Language) -> List[SearchRow]:
         article_model = Article if language == "eo" else ArticleRu
         search_model = SearchEntry if language == "eo" else SearchEntryRu
+        variants = self._generate_variants(query, language)
+        grouped = []
+
+        if variants:
+            lower_variants = [variant.lower() for variant in variants]
+            priority_case = case(
+                {variant: idx for idx, variant in enumerate(lower_variants)},
+                value=func.lower(search_model.vorto),
+                else_=len(variants),
+            )
+            stmt_variants = (
+                select(
+                    article_model.art_id,
+                    search_model.vorto,
+                    article_model.priskribo,
+                    article_model.komento,
+                    search_model.id,
+                )
+                .join(search_model, article_model.art_id == search_model.art_id)
+                .where(func.lower(search_model.vorto).in_(lower_variants))
+                .order_by(priority_case.asc(), search_model.id.asc())
+            )
+            grouped = self._group_by_article(self.session.execute(stmt_variants).all())
+
+        if grouped:
+            return grouped
 
         pattern = f"^[<]{{0,2}}{query}"
-        stmt = (
+        stmt_regex = (
             select(
                 article_model.art_id,
                 search_model.vorto,
@@ -168,25 +194,65 @@ class SearchService:
             .order_by(article_model.art_id.asc(), search_model.id.asc())
         )
 
-        rows = self.session.execute(stmt).all()
+        rows = self.session.execute(stmt_regex.limit(100)).all()
         grouped = self._group_by_article(rows)
 
-        if not grouped:
-            stmt_like = (
-                select(
-                    article_model.art_id,
-                    search_model.vorto,
-                    article_model.priskribo,
-                    article_model.komento,
-                    search_model.id,
-                )
-                .join(search_model, article_model.art_id == search_model.art_id)
-                .where(search_model.vorto.like(f"{query} I%"))
-                .order_by(article_model.art_id.asc(), search_model.id.asc())
+        if grouped:
+            return grouped
+
+        stmt_like = (
+            select(
+                article_model.art_id,
+                search_model.vorto,
+                article_model.priskribo,
+                article_model.komento,
+                search_model.id,
             )
-            rows = self.session.execute(stmt_like).all()
-            grouped = self._group_by_article(rows)
+            .join(search_model, article_model.art_id == search_model.art_id)
+            .where(search_model.vorto.like(f"{query} I%"))
+            .order_by(article_model.art_id.asc(), search_model.id.asc())
+        )
+        rows = self.session.execute(stmt_like.limit(50)).all()
+        grouped = self._group_by_article(rows)
         return grouped
+
+    def _generate_variants(self, query: str, language: Language) -> List[str]:
+        base = query.strip()
+        if not base:
+            return []
+
+        variants: List[str] = []
+
+        def add_variant(value: str) -> None:
+            normalized = value.strip()
+            if normalized and normalized not in variants:
+                variants.append(normalized)
+
+        add_variant(base)
+
+        roman_suffixes = ["I", "II", "III", "IV", "V"]
+        for suffix in roman_suffixes:
+            add_variant(f"{base} {suffix}")
+
+        if not base.startswith("-"):
+            add_variant(f"-{base}")
+            for suffix in roman_suffixes:
+                add_variant(f"-{base} {suffix}")
+
+        if not base.endswith("-"):
+            add_variant(f"{base}-")
+
+        if not base.startswith("<<"):
+            add_variant(f"<<{base}>>")
+            add_variant(f"<<{base}")
+
+        if not base.startswith('"'):
+            add_variant(f'"{base}"')
+
+        add_variant(base.lower())
+        add_variant(base.upper())
+
+        return variants
 
     def _group_by_article(self, rows: Sequence[Sequence]) -> List[SearchRow]:
         seen = set()
@@ -359,3 +425,42 @@ def format_article(text: str, resolver: LinkResolver) -> str:
     source = source.replace("\r\n", "\n")
     source = source.replace("\n", "<br>")
     return source
+    def _generate_variants(self, query: str, language: Language) -> List[str]:
+        base = query.strip()
+        if not base:
+            return []
+
+        variants: list[str] = []
+
+        def add_variant(value: str) -> None:
+            normalized = value.strip()
+            if normalized and normalized not in variants:
+                variants.append(normalized)
+
+        add_variant(base)
+
+        # Roman numeral variants for common cases
+        roman_suffixes = ["I", "II", "III", "IV", "V"]
+        for suffix in roman_suffixes:
+            add_variant(f"{base} {suffix}")
+
+        if not base.startswith("-"):
+            add_variant(f"-{base}")
+            for suffix in roman_suffixes:
+                add_variant(f"-{base} {suffix}")
+
+        if not base.endswith("-"):
+            add_variant(f"{base}-")
+
+        if not base.startswith("<<"):
+            add_variant(f"<<{base}>>")
+            add_variant(f"<<{base}")
+
+        if not base.startswith('"'):
+            add_variant(f'"{base}"')
+
+        # Include lowercase/uppercase direct variants
+        add_variant(base.lower())
+        add_variant(base.upper())
+
+        return variants

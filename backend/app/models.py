@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Optional
 
 from sqlalchemy import DateTime, Enum, Index, Integer, String, Text, func, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
@@ -30,7 +31,7 @@ class Article(Base):
         server_default=func.now(),
         onupdate=func.now(),
     )
-    komento: Mapped[str | None] = mapped_column(String(2048))
+    komento: Mapped[Optional[str]] = mapped_column(String(2048))
 
 
 class ArticleRu(Base):
@@ -46,7 +47,7 @@ class ArticleRu(Base):
         server_default=func.now(),
         onupdate=func.now(),
     )
-    komento: Mapped[str | None] = mapped_column(String(2048))
+    komento: Mapped[Optional[str]] = mapped_column(String(2048))
 
 
 class SearchEntry(Base):
@@ -54,9 +55,9 @@ class SearchEntry(Base):
     __table_args__ = (Index("ix_sercxo_vorto", "vorto"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    art_id: Mapped[int | None] = mapped_column(Integer)
-    vorto: Mapped[str | None] = mapped_column(String(255))
-    priskribo: Mapped[str | None] = mapped_column(Text)
+    art_id: Mapped[Optional[int]] = mapped_column(Integer)
+    vorto: Mapped[Optional[str]] = mapped_column(String(255))
+    priskribo: Mapped[Optional[str]] = mapped_column(Text)
 
 
 class SearchEntryRu(Base):
@@ -64,9 +65,9 @@ class SearchEntryRu(Base):
     __table_args__ = (Index("ix_sercxo_ru_vorto", "vorto"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    art_id: Mapped[int | None] = mapped_column(Integer)
-    vorto: Mapped[str | None] = mapped_column(String(255))
-    priskribo: Mapped[str | None] = mapped_column(Text)
+    art_id: Mapped[Optional[int]] = mapped_column(Integer)
+    vorto: Mapped[Optional[str]] = mapped_column(String(255))
+    priskribo: Mapped[Optional[str]] = mapped_column(Text)
 
 
 class FuzzyEntry(Base):
@@ -86,9 +87,9 @@ class SearchStat(Base):
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    vorto: Mapped[str | None] = mapped_column(String(255))
-    dato: Mapped[datetime | None] = mapped_column(DateTime(timezone=False))
-    hip: Mapped[str | None] = mapped_column(String(45))
+    vorto: Mapped[Optional[str]] = mapped_column(String(255))
+    dato: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=False))
+    hip: Mapped[Optional[str]] = mapped_column(String(45))
 
 
 class User(Base):
