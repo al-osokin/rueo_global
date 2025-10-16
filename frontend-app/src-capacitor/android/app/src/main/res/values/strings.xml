@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Эсперанто словари Бориса Кондратьева</string>
+    <string name="title_activity_main">Эсперанто словари Бориса Кондратьева</string>
+    <string name="package_name">ru.rueo.app.mobile</string>
+    <string name="custom_url_scheme">ru.rueo.app.mobile</string>
+</resources>

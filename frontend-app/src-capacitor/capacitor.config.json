@@ -1,0 +1,7 @@
+{
+  "appId": "ru.rueo.app.mobile",
+  "appName": "Эсперанто словари Бориса Кондратьева",
+  "bundledWebRuntime": false,
+  "npmClient": "yarn",
+  "webDir": "www"
+}

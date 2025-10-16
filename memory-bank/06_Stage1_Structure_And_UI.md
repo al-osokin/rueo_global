@@ -27,3 +27,6 @@
   - `admin.html` — панель запуска импортера и просмотра состояния `/admin/import/status`.
 - `backend/app/main.py` теперь отдаёт `index.html` по `/`, а `/admin/ui` — административный экран.
 - Эндпоинт `/status/info` читает `backend/data/tekstoj/klarigo.textile` и возвращает текст для фронтенда.
+
+
+- В проект добавлен фронтенд `frontend-app/` (Vue + Quasar), переподключён к новым API (`/search`, `/suggest`, `/status/info`, `/admin/import`).

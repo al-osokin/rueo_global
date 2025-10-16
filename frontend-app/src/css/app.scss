@@ -1,0 +1,137 @@
+// app global css in SCSS form
+@import url("https://fonts.googleapis.com/css2?family=Roboto:ital,wght@0,100;0,300;0,400;0,500;0,700;0,900;1,100;1,300;1,400;1,500;1,700;1,900&display=swap");
+body {
+  color: #6a6a6a;
+  font-family: "Roboto", sans-serif;
+}
+table {
+  border-collapse: collapse;
+  border-spacing: 0;
+}
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  color: #324d5b;
+}
+
+.link-style {
+  color: #324d5b !important;
+  font-weight: 300;
+}
+h1,
+h2,
+h3 {
+  font-size: 30px;
+  line-height: 40px;
+  //margin: 0 0 22px;
+}
+.wrap a {
+  color: #26a6d1;
+  cursor: pointer;
+  text-decoration: none;
+  transition: color 0.15s linear;
+}
+.wrap a:hover {
+  color: #1e85a7;
+}
+
+.search_result {
+  font-size: 20px;
+}
+.kom {
+  text-align: right;
+  font-style: italic;
+  font-size: 17px;
+}
+.history {
+  background: #eee;
+  color: #888;
+  padding: 5px 15px;
+  margin-top: 80px;
+  font-size: 85%;
+}
+hr {
+  border: none;
+  border-top: 1px solid #ddd;
+}
+blockquote {
+  background: transparent none repeat scroll 0 0;
+  border-left: 1px solid #ccc;
+  color: #666;
+  margin: 1em 0;
+  padding: 0 1em;
+}
+
+.my-tab-buttons .q-tab__label {
+  font-size: 20px;
+  font-weight: 700;
+}
+@media (max-width: $breakpoint-sm-max) {
+  .my-tab-buttons .q-tab__label {
+    font-size: 14px;
+    font-weight: 700;
+  }
+  h1,
+  h2,
+  h3 {
+    font-size: 20px;
+    line-height: 24px;
+    //margin: 0 0 22px;
+  }
+  .search_result {
+    font-size: 16px;
+  }
+  .kom {
+    font-size: 14px;
+  }
+}
+.flex-break {
+  flex: 1 0 100% !important;
+}
+
+.row .flex-break {
+  height: 0 !important;
+}
+
+.column .flex-break {
+  width: 0 !important;
+}
+
+table.usertable {
+  border: 1px none;
+  border-collapse: collapse;
+  margin-bottom: 2em;
+}
+table.usertable tr td,
+tr th {
+  vertical-align: top;
+  border-width: 1px;
+  border-color: #999;
+  border-style: solid;
+  padding: 4px;
+  /*font-family: Arial;*/
+  // font-size: 100%;
+  color: #444;
+}
+table.dtable {
+  width: 100%;
+  border: 0 none;
+  border-collapse: collapse;
+  margin-bottom: 2em;
+}
+table.dtable tr td {
+  vertical-align: top;
+  border-width: 0;
+  border-color: #999;
+  border-style: none;
+  padding: 4px;
+  // font-size: 100%;
+  color: #444;
+}
+table.usertable tr td,
+tr th {
+  // font-size:80%;
+}
