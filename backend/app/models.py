@@ -99,8 +99,8 @@ class ArticleFileState(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     lang: Mapped[str] = mapped_column(String(4), nullable=False)
     file_path: Mapped[str] = mapped_column(String(512), nullable=False)
-    last_run_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=False))
-    last_modified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=False))
+    last_run_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=False))
+    last_modified_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=False))
 
     articles: Mapped[list["ArticleState"]] = relationship(
         "ArticleState",
@@ -126,8 +126,8 @@ class ArticleState(Base):
     canonical_key: Mapped[str] = mapped_column(String(255), nullable=False)
     canonical_occurrence: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     checksum: Mapped[str] = mapped_column(String(128), nullable=False)
-    last_header_line: Mapped[str | None] = mapped_column(String(255))
-    last_seen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=False))
+    last_header_line: Mapped[Optional[str]] = mapped_column(String(255))
+    last_seen_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=False))
 
     file_state: Mapped[ArticleFileState] = relationship("ArticleFileState", back_populates="articles")
 
@@ -140,12 +140,12 @@ class ArticleChangeLog(Base):
     canonical_key: Mapped[str] = mapped_column(String(255), nullable=False)
     canonical_occurrence: Mapped[int] = mapped_column(Integer, nullable=False)
     detected_at: Mapped[datetime] = mapped_column(DateTime(timezone=False), nullable=False, server_default=func.now())
-    old_checksum: Mapped[str | None] = mapped_column(String(128))
+    old_checksum: Mapped[Optional[str]] = mapped_column(String(128))
     new_checksum: Mapped[str] = mapped_column(String(128), nullable=False)
-    old_header_line: Mapped[str | None] = mapped_column(String(255))
-    new_header_line: Mapped[str | None] = mapped_column(String(255))
-    action: Mapped[str | None] = mapped_column(String(128))
-    notes: Mapped[str | None] = mapped_column(Text)
+    old_header_line: Mapped[Optional[str]] = mapped_column(String(255))
+    new_header_line: Mapped[Optional[str]] = mapped_column(String(255))
+    action: Mapped[Optional[str]] = mapped_column(String(128))
+    notes: Mapped[Optional[str]] = mapped_column(Text)
 
     file_state: Mapped[ArticleFileState] = relationship("ArticleFileState")
 
