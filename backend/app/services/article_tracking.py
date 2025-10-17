@@ -120,6 +120,18 @@ class ArticleTracker:
         )
         state = self.session.execute(stmt).scalar_one_or_none()
 
+        if state is None:
+            stmt_by_index = (
+                select(ArticleState)
+                .where(ArticleState.file_state_id == file_state.id)
+                .where(ArticleState.article_index == article_index)
+                .limit(1)
+            )
+            state = self.session.execute(stmt_by_index).scalar_one_or_none()
+            if state is not None:
+                state.canonical_key = canonical_key
+                state.canonical_occurrence = occurrence
+
         last_header_line = header_lines[-1] if header_lines else None
         header_info = parse_header_line(last_header_line) if last_header_line else None
 

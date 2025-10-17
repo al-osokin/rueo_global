@@ -254,11 +254,9 @@ def _parse_articles(file_path: Path) -> List[Dict[str, Optional[str]]]:
             if line.strip()
         ]
         priskribo = match.group("vorto").rstrip()
-        canonical_key = (
-            extract_canonical_key(priskribo)
-            or (header_lines[0] if header_lines else "")
-            or f"__article_{len(entries)}"
-        )
+        canonical_key = extract_canonical_key(priskribo)
+        if not canonical_key:
+            canonical_key = f"{file_path.name}#{len(entries)}"
         occurrence = canonical_counts.get(canonical_key, 0)
         canonical_counts[canonical_key] = occurrence + 1
 
