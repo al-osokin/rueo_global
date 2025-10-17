@@ -509,7 +509,7 @@ def _load_last_ru_letter(data_dir: Path, provided: Optional[str]) -> Optional[st
         return provided.strip()
     candidate = data_dir / "last-ru-letter.txt"
     if candidate.exists():
-        for encoding in ("cp1251", "utf-8"):
+        for encoding in ("utf-8", "cp1251"):
             try:
                 return candidate.read_text(encoding=encoding).strip()
             except UnicodeDecodeError:
