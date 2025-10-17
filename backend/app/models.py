@@ -3,8 +3,8 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import DateTime, Enum, Index, Integer, String, Text, func, UniqueConstraint
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy import DateTime, Enum, ForeignKey, Index, Integer, String, Text, func, UniqueConstraint
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
 
@@ -90,6 +90,64 @@ class SearchStat(Base):
     vorto: Mapped[Optional[str]] = mapped_column(String(255))
     dato: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=False))
     hip: Mapped[Optional[str]] = mapped_column(String(45))
+
+
+class ArticleFileState(Base):
+    __tablename__ = "article_file_states"
+    __table_args__ = (UniqueConstraint("lang", "file_path", name="uq_article_file_state"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    lang: Mapped[str] = mapped_column(String(4), nullable=False)
+    file_path: Mapped[str] = mapped_column(String(512), nullable=False)
+    last_run_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=False))
+    last_modified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=False))
+
+    articles: Mapped[list["ArticleState"]] = relationship(
+        "ArticleState",
+        back_populates="file_state",
+        cascade="all, delete-orphan",
+    )
+
+
+class ArticleState(Base):
+    __tablename__ = "article_states"
+    __table_args__ = (
+        UniqueConstraint(
+            "file_state_id",
+            "canonical_key",
+            "canonical_occurrence",
+            name="uq_article_state",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    file_state_id: Mapped[int] = mapped_column(ForeignKey("article_file_states.id"), nullable=False)
+    article_index: Mapped[int] = mapped_column(Integer, nullable=False)
+    canonical_key: Mapped[str] = mapped_column(String(255), nullable=False)
+    canonical_occurrence: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    checksum: Mapped[str] = mapped_column(String(128), nullable=False)
+    last_header_line: Mapped[str | None] = mapped_column(String(255))
+    last_seen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=False))
+
+    file_state: Mapped[ArticleFileState] = relationship("ArticleFileState", back_populates="articles")
+
+
+class ArticleChangeLog(Base):
+    __tablename__ = "article_change_log"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    file_state_id: Mapped[int] = mapped_column(ForeignKey("article_file_states.id"), nullable=False)
+    canonical_key: Mapped[str] = mapped_column(String(255), nullable=False)
+    canonical_occurrence: Mapped[int] = mapped_column(Integer, nullable=False)
+    detected_at: Mapped[datetime] = mapped_column(DateTime(timezone=False), nullable=False, server_default=func.now())
+    old_checksum: Mapped[str | None] = mapped_column(String(128))
+    new_checksum: Mapped[str] = mapped_column(String(128), nullable=False)
+    old_header_line: Mapped[str | None] = mapped_column(String(255))
+    new_header_line: Mapped[str | None] = mapped_column(String(255))
+    action: Mapped[str | None] = mapped_column(String(128))
+    notes: Mapped[str | None] = mapped_column(Text)
+
+    file_state: Mapped[ArticleFileState] = relationship("ArticleFileState")
 
 
 class User(Base):

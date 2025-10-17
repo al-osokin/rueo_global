@@ -4,6 +4,7 @@ import argparse
 import logging
 import re
 from collections import OrderedDict
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence, Tuple
 
@@ -17,6 +18,11 @@ from app.models import (
     FuzzyEntry,
     SearchEntry,
     SearchEntryRu,
+)
+from app.services.article_tracking import (
+    ArticleTracker,
+    calculate_checksum_from_text,
+    extract_canonical_key,
 )
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -59,6 +65,10 @@ def run_import(
     notify = _make_notifier(status_callback)
     notify("initializing", message="Старт импорта данных")
 
+    run_time = datetime.now()
+    eo_summary: Dict[str, int] = {}
+    ru_summary: Dict[str, int] = {}
+
     with SessionLocal() as session:
         if truncate:
             notify("truncating", message="Очистка таблиц перед загрузкой")
@@ -66,26 +76,30 @@ def run_import(
 
         LOGGER.info("Processing Esperanto data…")
         notify("processing_files", lang="eo", current=0, total=0, message="Начало обработки файлов")
-        eo_count = _process_language(
+        eo_count, eo_summary = _process_language(
             session,
             data_dir,
             "eo",
+            run_time,
             progress_callback=lambda update: notify(
                 "processing_files", lang="eo", **update
             ),
         )
         LOGGER.info("Inserted %d Esperanto articles", eo_count)
+        notify("tracking_summary", lang="eo", summary=eo_summary)
         LOGGER.info("Processing Russian data…")
         notify("processing_files", lang="ru", current=0, total=0, message="Начало обработки файлов")
-        ru_count = _process_language(
+        ru_count, ru_summary = _process_language(
             session,
             data_dir,
             "ru",
+            run_time,
             progress_callback=lambda update: notify(
                 "processing_files", lang="ru", **update
             ),
         )
         LOGGER.info("Inserted %d Russian articles", ru_count)
+        notify("tracking_summary", lang="ru", summary=ru_summary)
         session.commit()
 
         LOGGER.info("Building search indices for Esperanto…")
@@ -124,6 +138,10 @@ def run_import(
         if letter:
             _save_last_ru_letter(data_dir, letter)
         stats = _collect_stats(session, letter)
+        if eo_summary:
+            stats.setdefault("eo", {}).update({"tracking": eo_summary})
+        if ru_summary:
+            stats.setdefault("ru", {}).update({"tracking": ru_summary})
         notify("finalizing", message="Формирование служебных файлов", stats=stats)
         _write_status_file(data_dir, stats)
         notify("completed", message="Импорт завершён", stats=stats)
@@ -140,8 +158,9 @@ def _process_language(
     session: Session,
     data_dir: Path,
     lang: str,
+    run_time: datetime,
     progress_callback: Optional[ProgressCallback] = None,
-) -> int:
+) -> Tuple[int, Dict[str, int]]:
     lang_dir_name = LANG_DIRS[lang]
     lang_dir = data_dir / lang_dir_name
     if not lang_dir.exists():
@@ -160,6 +179,8 @@ def _process_language(
         progress_callback({"current": 0, "total": total_files})
 
     total_inserted = 0
+    tracker = ArticleTracker(session, lang, run_time)
+
     for index, file_path in enumerate(files, start=1):
         entries = _parse_articles(file_path)
         if not entries:
@@ -173,15 +194,36 @@ def _process_language(
                     }
                 )
             continue
-        insert_payload = [
-            {
-                "priskribo": entry["priskribo"],
-                "lasta": "j",
-                "uz_id": 1,
-                "komento": entry["komento"],
-            }
-            for entry in entries
-        ]
+
+        rel_path = Path(lang_dir_name) / file_path.name
+        file_state = tracker.ensure_file_state(
+            str(rel_path),
+            datetime.fromtimestamp(file_path.stat().st_mtime),
+        )
+
+        insert_payload = []
+        for article_index, entry in enumerate(entries):
+            header_lines = list(entry.get("header_lines") or [])
+            updated_lines = tracker.process_article(
+                file_state=file_state,
+                article_index=article_index,
+                canonical_key=entry.get("canonical_key", ""),
+                occurrence=entry.get("canonical_occurrence", 0),
+                checksum=entry.get("checksum") or "",
+                header_lines=header_lines,
+            )
+            if updated_lines:
+                entry["komento"] = ", ".join(updated_lines)
+            insert_payload.append(
+                {
+                    "priskribo": entry["priskribo"],
+                    "lasta": "j",
+                    "uz_id": 1,
+                    "komento": entry["komento"],
+                }
+            )
+
+        tracker.finalize_file(file_state)
         session.execute(insert(article_table), insert_payload)
         total_inserted += len(insert_payload)
         if progress_callback:
@@ -193,7 +235,8 @@ def _process_language(
                     "inserted": len(insert_payload),
                 }
             )
-    return total_inserted
+
+    return total_inserted, tracker.get_summary()
 
 
 def _parse_articles(file_path: Path) -> List[Dict[str, Optional[str]]]:
@@ -202,11 +245,34 @@ def _parse_articles(file_path: Path) -> List[Dict[str, Optional[str]]]:
     text_cp += "\r\n\r\n"
 
     entries: List[Dict[str, Optional[str]]] = []
+    canonical_counts: Dict[str, int] = {}
     for match in ARTICLE_PATTERN.finditer(text_cp):
-        redaktoroj = match.group("redaktoroj")
-        komento = redaktoroj.replace("\r\n", ", ").rstrip(", ")
+        redaktoroj = match.group("redaktoroj") or ""
+        header_lines = [
+            line.strip()
+            for line in redaktoroj.replace("\r\n", "\n").split("\n")
+            if line.strip()
+        ]
         priskribo = match.group("vorto").rstrip()
-        entries.append({"komento": komento or None, "priskribo": priskribo})
+        canonical_key = (
+            extract_canonical_key(priskribo)
+            or (header_lines[0] if header_lines else "")
+            or f"__article_{len(entries)}"
+        )
+        occurrence = canonical_counts.get(canonical_key, 0)
+        canonical_counts[canonical_key] = occurrence + 1
+
+        checksum = calculate_checksum_from_text(priskribo)
+        entries.append(
+            {
+                "komento": (", ".join(header_lines) if header_lines else None),
+                "priskribo": priskribo,
+                "header_lines": header_lines,
+                "canonical_key": canonical_key,
+                "canonical_occurrence": occurrence,
+                "checksum": checksum,
+            }
+        )
     return entries
 
 
