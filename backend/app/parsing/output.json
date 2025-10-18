@@ -1,0 +1,2728 @@
+{
+  "meta": {
+    "parser_version": "3.0-draft",
+    "run_timestamp_utc": "2025-09-30T22:10:58.857358+00:00",
+    "articles_count": 32,
+    "issues_count": 0
+  },
+  "articles": [
+    {
+      "headword": {
+        "raw_form": "[Abdul/o]",
+        "lemmas": [
+          {
+            "raw": "Abdul/o",
+            "lemma": "Abdulo"
+          }
+        ],
+        "official_mark": null,
+        "homonym": null
+      },
+      "body": [
+        {
+          "type": "translation",
+          "content": [
+            {
+              "type": "text",
+              "style": "regular",
+              "text": "Абдул(л)`а"
+            },
+            {
+              "type": "divider",
+              "kind": "near_divider",
+              "text": ","
+            },
+            {
+              "type": "text",
+              "style": "regular",
+              "text": "Абд`ул"
+            }
+          ],
+          "meta": {
+            "search_terms": [
+              "Абдул`а",
+              "Абдулл`а"
+            ]
+          }
+        },
+        {
+          "type": "note",
+          "content": [
+            {
+              "type": "text",
+              "style": "italic",
+              "text": "(муж. имя)"
+            }
+          ]
+        },
+        {
+          "type": "sentence_divider",
+          "text": "."
+        }
+      ],
+      "meta": {
+        "template": "default"
+      }
+    },
+    {
+      "headword": {
+        "raw_form": "[abel|o]",
+        "lemmas": [
+          {
+            "raw": "abel|o",
+            "lemma": "abelo"
+          }
+        ],
+        "official_mark": "UV",
+        "homonym": null
+      },
+      "body": [
+        {
+          "type": "translation",
+          "content": [
+            {
+              "type": "label",
+              "text": "энт."
+            },
+            {
+              "type": "text",
+              "style": "regular",
+              "text": "пчел`а"
+            }
+          ]
+        },
+        {
+          "type": "headword",
+          "raw_form": "[~a I]",
+          "lemmas": [
+            {
+              "raw": "~a",
+              "lemma": "abela"
+            }
+          ],
+          "official_mark": null,
+          "homonym": "I",
+          "children": [
+            {
+              "type": "translation",
+              "content": [
+                {
+                  "type": "text",
+                  "style": "regular",
+                  "text": "пчел`иный"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "headword",
+          "raw_form": "[~ar/o]",
+          "lemmas": [
+            {
+              "raw": "~ar/o",
+              "lemma": "abelaro"
+            }
+          ],
+          "official_mark": null,
+          "homonym": null,
+          "children": [
+            {
+              "type": "reference",
+              "mode": "see",
+              "text": "см.",
+              "targets": [
+                "abelsvarmo"
+              ]
+            }
+          ]
+        },
+        {
+          "type": "headword",
+          "raw_form": "[~ed/o/j]",
+          "lemmas": [
+            {
+              "raw": "~ed/o/j",
+              "lemma": "abeledoj"
+            }
+          ],
+          "official_mark": null,
+          "homonym": null,
+          "children": [
+            {
+              "type": "translation",
+              "content": [
+                {
+                  "type": "text",
+                  "style": "regular",
+                  "text": "насто`ящие пчёлы"
+                }
+              ]
+            },
+            {
+              "type": "note",
+              "content": [
+                {
+                  "type": "text",
+                  "style": "italic",
+                  "text": "(семейство)"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "headword",
+          "raw_form": "[~ej/o]",
+          "lemmas": [
+            {
+              "raw": "~ej/o",
+              "lemma": "abelejo"
+            }
+          ],
+          "official_mark": null,
+          "homonym": null,
+          "children": [
+            {
+              "type": "translation",
+              "content": [
+                {
+                  "type": "text",
+                  "style": "regular",
+                  "text": "пч`ельник"
+                },
+                {
+                  "type": "divider",
+                  "kind": "near_divider",
+                  "text": ","
+                },
+                {
+                  "type": "text",
+                  "style": "regular",
+                  "text": "пч`ельня"
+                },
+                {
+                  "type": "divider",
+                  "kind": "near_divider",
+                  "text": ","
+                },
+                {
+                  "type": "text",
+                  "style": "regular",
+                  "text": "п`асека"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "headword",
+          "raw_form": "[~ej/a]",
+          "lemmas": [
+            {
+              "raw": "~ej/a",
+              "lemma": "abeleja"
+            }
+          ],
+          "official_mark": null,
+          "homonym": null,
+          "children": [
+            {
+              "type": "translation",
+              "content": [
+                {
+                  "type": "text",
+                  "style": "regular",
+                  "text": "п`асечный"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "headword",
+          "raw_form": "[~in/o]",
+          "lemmas": [
+            {
+              "raw": "~in/o",
+              "lemma": "abelino"
+            }
+          ],
+          "official_mark": null,
+          "homonym": null,
+          "children": [
+            {
+              "type": "translation",
+              "content": [
+                {
+                  "type": "text",
+                  "style": "regular",
+                  "text": "с`амка пчел`ы"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "headword",
+          "raw_form": "[~ist/o]",
+          "lemmas": [
+            {
+              "raw": "~ist/o",
+              "lemma": "abelisto"
+            }
+          ],
+          "official_mark": null,
+          "homonym": null,
+          "children": [
+            {
+              "type": "translation",
+              "content": [
+                {
+                  "type": "text",
+                  "style": "regular",
+                  "text": "пчелов`од"
+                },
+                {
+                  "type": "divider",
+                  "kind": "near_divider",
+                  "text": ","
+                },
+                {
+                  "type": "text",
+                  "style": "regular",
+                  "text": "п`асечник"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "headword",
+          "raw_form": "[~ist/a]",
+          "lemmas": [
+            {
+              "raw": "~ist/a",
+              "lemma": "abelista"
+            }
+          ],
+          "official_mark": null,
+          "homonym": null,
+          "children": [
+            {
+              "type": "translation",
+              "content": [
+                {
+                  "type": "text",
+                  "style": "regular",
+                  "text": "пчелов`одный"
+                }
+              ]
+            },
+            {
+              "type": "illustration",
+              "eo": "abelista masko",
+              "ru_segments": [
+                {
+                  "text": "м`аска пчелов`ода",
+                  "kind": "term"
+                },
+                {
+                  "text": ",",
+                  "kind": "near_divider"
+                },
+                {
+                  "text": "лицев`ая с`етка",
+                  "kind": "term"
+                },
+                {
+                  "text": ",",
+                  "kind": "near_divider"
+                },
+                {
+                  "text": "защ`итная с`етка",
+                  "kind": "term"
+                },
+                {
+                  "kind": "note",
+                  "text": "(в виде маски)",
+                  "style": "italic"
+                },
+                {
+                  "kind": "far_divider",
+                  "text": ";"
+                }
+              ],
+              "eo_raw": "~ista masko",
+              "eo_expanded": [
+                "abelista masko"
+              ]
+            },
+            {
+              "type": "illustration",
+              "eo": "abelista vualo",
+              "ru_segments": [
+                {
+                  "text": "лицев`ая с`етка",
+                  "kind": "term"
+                },
+                {
+                  "text": ",",
+                  "kind": "near_divider"
+                },
+                {
+                  "text": "защ`итная с`етка",
+                  "kind": "term"
+                },
+                {
+                  "text": "(в виде вуали)",
+                  "kind": "note",
+                  "style": "italic"
+                },
+                {
+                  "text": ";",
+                  "kind": "far_divider"
+                }
+              ],
+              "ru_requires_review": true,
+              "eo_raw": "~ista vualo",
+              "eo_expanded": [
+                "abelista vualo"
+              ]
+            }
+          ]
+        },
+        {
+          "type": "headword",
+          "raw_form": "[~uj/o]",
+          "lemmas": [
+            {
+              "raw": "~uj/o",
+              "lemma": "abelujo"
+            }
+          ],
+          "official_mark": null,
+          "homonym": null,
+          "children": [
+            {
+              "type": "translation",
+              "number": 1,
+              "content": [
+                {
+                  "type": "text",
+                  "style": "regular",
+                  "text": "`улей"
+                }
+              ]
+            },
+            {
+              "type": "illustration",
+              "number": 2,
+              "eo": "(natura) abelujo",
+              "eo_raw": "(natura) ~ujo",
+              "eo_expanded": [
+                "(natura) abelujo"
+              ]
+            },
+            {
+              "type": "reference",
+              "mode": "see",
+              "text": "см.",
+              "targets": [
+                "abelnesto"
+              ]
+            }
+          ]
+        },
+        {
+          "type": "headword",
+          "raw_form": "[~uj/a]",
+          "lemmas": [
+            {
+              "raw": "~uj/a",
+              "lemma": "abeluja"
+            }
+          ],
+          "official_mark": null,
+          "homonym": null,
+          "children": [
+            {
+              "type": "translation",
+              "content": [
+                {
+                  "type": "text",
+                  "style": "regular",
+                  "text": "`ульевый"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "headword",
+          "raw_form": "[~uj/ar/o]",
+          "lemmas": [
+            {
+              "raw": "~uj/ar/o",
+              "lemma": "abelujaro"
+            }
+          ],
+          "official_mark": null,
+          "homonym": null,
+          "children": [
+            {
+              "type": "reference",
+              "mode": "see",
+              "text": "см.",
+              "targets": [
+                "~ejo"
+              ]
+            },
+            {
+              "type": "sentence_divider",
+              "text": "."
+            }
+          ]
+        }
+      ],
+      "meta": {
+        "template": "lexeme_numbered",
+        "sections": [
+          {
+            "role": "main",
+            "body_indexes": [
+              0
+            ]
+          },
+          {
+            "role": "wordform",
+            "body_index": 1,
+            "raw_form": "[~a I]"
+          },
+          {
+            "role": "wordform",
+            "body_index": 2,
+            "raw_form": "[~ar/o]"
+          },
+          {
+            "role": "wordform",
+            "body_index": 3,
+            "raw_form": "[~ed/o/j]"
+          },
+          {
+            "role": "wordform",
+            "body_index": 4,
+            "raw_form": "[~ej/o]"
+          },
+          {
+            "role": "wordform",
+            "body_index": 5,
+            "raw_form": "[~ej/a]"
+          },
+          {
+            "role": "wordform",
+            "body_index": 6,
+            "raw_form": "[~in/o]"
+          },
+          {
+            "role": "wordform",
+            "body_index": 7,
+            "raw_form": "[~ist/o]"
+          },
+          {
+            "role": "wordform",
+            "body_index": 8,
+            "raw_form": "[~ist/a]"
+          },
+          {
+            "role": "wordform",
+            "body_index": 9,
+            "raw_form": "[~uj/o]"
+          },
+          {
+            "role": "wordform",
+            "body_index": 10,
+            "raw_form": "[~uj/a]"
+          },
+          {
+            "role": "wordform",
+            "body_index": 11,
+            "raw_form": "[~uj/ar/o]"
+          }
+        ]
+      }
+    },
+    {
+      "headword": {
+        "raw_form": "[Abel/o]",
+        "lemmas": [
+          {
+            "raw": "Abel/o",
+            "lemma": "Abelo"
+          }
+        ],
+        "official_mark": null,
+        "homonym": null
+      },
+      "body": [
+        {
+          "type": "translation",
+          "content": [
+            {
+              "type": "text",
+              "style": "regular",
+              "text": "`Абель"
+            }
+          ]
+        },
+        {
+          "type": "note",
+          "content": [
+            {
+              "type": "text",
+              "style": "italic",
+              "text": "(норвежский математик)"
+            }
+          ]
+        },
+        {
+          "type": "sentence_divider",
+          "text": "."
+        }
+      ],
+      "meta": {
+        "template": "default"
+      }
+    },
+    {
+      "headword": {
+        "raw_form": "[abel/a II]",
+        "lemmas": [
+          {
+            "raw": "abel/a",
+            "lemma": "abela"
+          }
+        ],
+        "official_mark": null,
+        "homonym": "II"
+      },
+      "body": [
+        {
+          "type": "translation",
+          "content": [
+            {
+              "type": "label",
+              "text": "мат."
+            },
+            {
+              "type": "text",
+              "style": "regular",
+              "text": "`абелев"
+            }
+          ]
+        },
+        {
+          "type": "illustration",
+          "eo": "abela grupo",
+          "ru_segments": [
+            {
+              "text": "`абелева гр`уппа",
+              "kind": "term"
+            },
+            {
+              "text": ",",
+              "kind": "near_divider"
+            },
+            {
+              "text": "коммутат`ивная гр`уппа",
+              "kind": "term"
+            },
+            {
+              "text": ".",
+              "kind": "sentence_divider"
+            }
+          ],
+          "eo_raw": "~ grupo",
+          "eo_expanded": [
+            "abela grupo"
+          ]
+        }
+      ],
+      "meta": {
+        "template": "default"
+      }
+    },
+    {
+      "headword": {
+        "raw_form": "[Abelard/o]",
+        "lemmas": [
+          {
+            "raw": "Abelard/o",
+            "lemma": "Abelardo"
+          }
+        ],
+        "official_mark": null,
+        "homonym": null
+      },
+      "body": [
+        {
+          "type": "translation",
+          "content": [
+            {
+              "type": "text",
+              "style": "regular",
+              "text": "Абел`яр"
+            }
+          ]
+        },
+        {
+          "type": "note",
+          "content": [
+            {
+              "type": "text",
+              "style": "italic",
+              "text": "(французский философ, теолог, поэт)"
+            }
+          ]
+        },
+        {
+          "type": "sentence_divider",
+          "text": "."
+        }
+      ],
+      "meta": {
+        "template": "default"
+      }
+    },
+    {
+      "headword": {
+        "raw_form": "[abel/bred|a]",
+        "lemmas": [
+          {
+            "raw": "abel/bred|a",
+            "lemma": "abelbreda"
+          }
+        ],
+        "official_mark": null,
+        "homonym": null
+      },
+      "body": [
+        {
+          "type": "translation",
+          "content": [
+            {
+              "type": "text",
+              "style": "regular",
+              "text": "пчелов`одческий"
+            }
+          ]
+        },
+        {
+          "type": "headword",
+          "raw_form": "[~ad/o]",
+          "lemmas": [
+            {
+              "raw": "~ad/o",
+              "lemma": "abelbredado"
+            }
+          ],
+          "official_mark": null,
+          "homonym": null,
+          "children": [
+            {
+              "type": "translation",
+              "content": [
+                {
+                  "type": "text",
+                  "style": "regular",
+                  "text": "пчелов`одство"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "headword",
+          "raw_form": "[~ej/o]",
+          "lemmas": [
+            {
+              "raw": "~ej/o",
+              "lemma": "abelbredejo"
+            }
+          ],
+          "official_mark": null,
+          "homonym": null,
+          "children": [
+            {
+              "type": "translation",
+              "content": [
+                {
+                  "type": "text",
+                  "style": "regular",
+                  "text": "пч`ельник"
+                },
+                {
+                  "type": "divider",
+                  "kind": "near_divider",
+                  "text": ","
+                },
+                {
+                  "type": "text",
+                  "style": "regular",
+                  "text": "пч`ельня"
+                },
+                {
+                  "type": "divider",
+                  "kind": "near_divider",
+                  "text": ","
+                },
+                {
+                  "type": "text",
+                  "style": "regular",
+                  "text": "п`асека"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "headword",
+          "raw_form": "[~ej/a]",
+          "lemmas": [
+            {
+              "raw": "~ej/a",
+              "lemma": "abelbredeja"
+            }
+          ],
+          "official_mark": null,
+          "homonym": null,
+          "children": [
+            {
+              "type": "translation",
+              "content": [
+                {
+                  "type": "text",
+                  "style": "regular",
+                  "text": "п`асечный"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "headword",
+          "raw_form": "[~ist/o]",
+          "lemmas": [
+            {
+              "raw": "~ist/o",
+              "lemma": "abelbredisto"
+            }
+          ],
+          "official_mark": null,
+          "homonym": null,
+          "children": [
+            {
+              "type": "translation",
+              "content": [
+                {
+                  "type": "text",
+                  "style": "regular",
+                  "text": "пчелов`од"
+                },
+                {
+                  "type": "divider",
+                  "kind": "near_divider",
+                  "text": ","
+                },
+                {
+                  "type": "text",
+                  "style": "regular",
+                  "text": "п`асечник"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "headword",
+          "raw_form": "[~ist/a]",
+          "lemmas": [
+            {
+              "raw": "~ist/a",
+              "lemma": "abelbredista"
+            }
+          ],
+          "official_mark": null,
+          "homonym": null,
+          "children": [
+            {
+              "type": "reference",
+              "mode": "see",
+              "text": "см.",
+              "targets": [
+                "abelista"
+              ]
+            },
+            {
+              "type": "sentence_divider",
+              "text": "."
+            }
+          ]
+        }
+      ],
+      "meta": {
+        "template": "default"
+      }
+    },
+    {
+      "headword": {
+        "raw_form": "[abel/kest/o]",
+        "lemmas": [
+          {
+            "raw": "abel/kest/o",
+            "lemma": "abelkesto"
+          }
+        ],
+        "official_mark": null,
+        "homonym": null
+      },
+      "body": [
+        {
+          "type": "translation",
+          "content": [
+            {
+              "type": "text",
+              "style": "regular",
+              "text": "`улей"
+            }
+          ]
+        },
+        {
+          "type": "note",
+          "content": [
+            {
+              "type": "text",
+              "style": "italic",
+              "text": "(в виде ящика)"
+            }
+          ]
+        },
+        {
+          "type": "sentence_divider",
+          "text": "."
+        }
+      ],
+      "meta": {
+        "template": "default"
+      }
+    },
+    {
+      "headword": {
+        "raw_form": "[abel/korb/o]",
+        "lemmas": [
+          {
+            "raw": "abel/korb/o",
+            "lemma": "abelkorbo"
+          }
+        ],
+        "official_mark": null,
+        "homonym": null
+      },
+      "body": [
+        {
+          "type": "translation",
+          "content": [
+            {
+              "type": "text",
+              "style": "regular",
+              "text": "сап`етка"
+            },
+            {
+              "type": "divider",
+              "kind": "near_divider",
+              "text": ","
+            },
+            {
+              "type": "text",
+              "style": "regular",
+              "text": "`улей-плетёнка"
+            },
+            {
+              "type": "divider",
+              "kind": "near_divider",
+              "text": ","
+            },
+            {
+              "type": "text",
+              "style": "regular",
+              "text": "плетёный `улей"
+            }
+          ]
+        },
+        {
+          "type": "sentence_divider",
+          "text": "."
+        }
+      ],
+      "meta": {
+        "template": "default"
+      }
+    },
+    {
+      "headword": {
+        "raw_form": "[abel/kultur|o]",
+        "lemmas": [
+          {
+            "raw": "abel/kultur|o",
+            "lemma": "abelkulturo"
+          }
+        ],
+        "official_mark": null,
+        "homonym": null
+      },
+      "body": [
+        {
+          "type": "translation",
+          "content": [
+            {
+              "type": "label",
+              "text": "уст."
+            },
+            {
+              "type": "divider",
+              "text": ",",
+              "kind": "near_divider"
+            }
+          ],
+          "children": [
+            {
+              "type": "reference",
+              "mode": "see",
+              "text": "см.",
+              "targets": [
+                "abelbredado"
+              ]
+            }
+          ]
+        },
+        {
+          "type": "headword",
+          "raw_form": "[~ist/o]",
+          "lemmas": [
+            {
+              "raw": "~ist/o",
+              "lemma": "abelkulturisto"
+            }
+          ],
+          "official_mark": null,
+          "homonym": null,
+          "children": [
+            {
+              "type": "translation",
+              "content": [
+                {
+                  "type": "label",
+                  "text": "уст."
+                },
+                {
+                  "type": "divider",
+                  "text": ",",
+                  "kind": "near_divider"
+                }
+              ]
+            },
+            {
+              "type": "reference",
+              "mode": "see",
+              "text": "см.",
+              "targets": [
+                "abelbredisto"
+              ]
+            },
+            {
+              "type": "sentence_divider",
+              "text": "."
+            }
+          ]
+        }
+      ],
+      "meta": {
+        "template": "default"
+      }
+    },
+    {
+      "headword": {
+        "raw_form": "[abel/manĝ/ul/o]",
+        "lemmas": [
+          {
+            "raw": "abel/manĝ/ul/o",
+            "lemma": "abelmanĝulo"
+          }
+        ],
+        "official_mark": null,
+        "homonym": null
+      },
+      "body": [
+        {
+          "type": "reference",
+          "mode": "see",
+          "text": "см.",
+          "targets": [
+            "meropo"
+          ]
+        },
+        {
+          "type": "sentence_divider",
+          "text": "."
+        }
+      ],
+      "meta": {
+        "template": "default"
+      }
+    },
+    {
+      "headword": {
+        "raw_form": "[abel/nest/o]",
+        "lemmas": [
+          {
+            "raw": "abel/nest/o",
+            "lemma": "abelnesto"
+          }
+        ],
+        "official_mark": null,
+        "homonym": null
+      },
+      "body": [
+        {
+          "type": "translation",
+          "content": [
+            {
+              "type": "text",
+              "style": "regular",
+              "text": "пчел`иное гнезд`о"
+            }
+          ]
+        },
+        {
+          "type": "sentence_divider",
+          "text": "."
+        }
+      ],
+      "meta": {
+        "template": "default"
+      }
+    },
+    {
+      "headword": {
+        "raw_form": "[abel/reĝ/in/o]",
+        "lemmas": [
+          {
+            "raw": "abel/reĝ/in/o",
+            "lemma": "abelreĝino"
+          }
+        ],
+        "official_mark": null,
+        "homonym": null
+      },
+      "body": [
+        {
+          "type": "translation",
+          "content": [
+            {
+              "type": "text",
+              "style": "regular",
+              "text": "пчел`иная м`атка"
+            }
+          ]
+        },
+        {
+          "type": "sentence_divider",
+          "text": "."
+        }
+      ],
+      "meta": {
+        "template": "default"
+      }
+    },
+    {
+      "headword": {
+        "raw_form": "[abel/svarm/o]",
+        "lemmas": [
+          {
+            "raw": "abel/svarm/o",
+            "lemma": "abelsvarmo"
+          }
+        ],
+        "official_mark": null,
+        "homonym": null
+      },
+      "body": [
+        {
+          "type": "translation",
+          "content": [
+            {
+              "type": "text",
+              "style": "regular",
+              "text": "рой пчёл"
+            },
+            {
+              "type": "divider",
+              "kind": "near_divider",
+              "text": ","
+            },
+            {
+              "type": "text",
+              "style": "regular",
+              "text": "пчел`иный рой"
+            },
+            {
+              "type": "divider",
+              "kind": "near_divider",
+              "text": ","
+            },
+            {
+              "type": "text",
+              "style": "regular",
+              "text": "пчел`иная семь`я"
+            }
+          ]
+        },
+        {
+          "type": "sentence_divider",
+          "text": "."
+        }
+      ],
+      "meta": {
+        "template": "default"
+      }
+    },
+    {
+      "headword": {
+        "raw_form": "[abel/vaks/o]",
+        "lemmas": [
+          {
+            "raw": "abel/vaks/o",
+            "lemma": "abelvakso"
+          }
+        ],
+        "official_mark": null,
+        "homonym": null
+      },
+      "body": [
+        {
+          "type": "translation",
+          "content": [
+            {
+              "type": "text",
+              "style": "regular",
+              "text": "пчел`иный воск"
+            }
+          ]
+        },
+        {
+          "type": "sentence_divider",
+          "text": "."
+        }
+      ],
+      "meta": {
+        "template": "default"
+      }
+    },
+    {
+      "headword": {
+        "raw_form": "[abel/venen/o]",
+        "lemmas": [
+          {
+            "raw": "abel/venen/o",
+            "lemma": "abelveneno"
+          }
+        ],
+        "official_mark": null,
+        "homonym": null
+      },
+      "body": [
+        {
+          "type": "translation",
+          "content": [
+            {
+              "type": "text",
+              "style": "regular",
+              "text": "пчел`иный яд"
+            }
+          ]
+        },
+        {
+          "type": "sentence_divider",
+          "text": "."
+        }
+      ],
+      "meta": {
+        "template": "default"
+      }
+    },
+    {
+      "headword": {
+        "raw_form": "[abel/vir/o]",
+        "lemmas": [
+          {
+            "raw": "abel/vir/o",
+            "lemma": "abelviro"
+          }
+        ],
+        "official_mark": null,
+        "homonym": null
+      },
+      "body": [
+        {
+          "type": "translation",
+          "content": [
+            {
+              "type": "label",
+              "text": "уст."
+            },
+            {
+              "type": "divider",
+              "text": ",",
+              "kind": "near_divider"
+            }
+          ],
+          "children": [
+            {
+              "type": "reference",
+              "mode": "see",
+              "text": "см.",
+              "targets": [
+                "virabelo"
+              ]
+            }
+          ]
+        },
+        {
+          "type": "sentence_divider",
+          "text": "."
+        }
+      ],
+      "meta": {
+        "template": "default"
+      }
+    },
+    {
+      "headword": {
+        "raw_form": "[aber/i]",
+        "lemmas": [
+          {
+            "raw": "aber/i",
+            "lemma": "aberi"
+          }
+        ],
+        "official_mark": null,
+        "homonym": null
+      },
+      "body": [
+        {
+          "type": "translation",
+          "content": [
+            {
+              "type": "text",
+              "style": "regular",
+              "text": "{vn}"
+            },
+            {
+              "type": "divider",
+              "text": ",",
+              "kind": "near_divider"
+            }
+          ]
+        },
+        {
+          "type": "explanation",
+          "content": [
+            {
+              "type": "text",
+              "style": "italic",
+              "text": "оч.редк."
+            }
+          ],
+          "children": [
+            {
+              "type": "reference",
+              "mode": "see",
+              "text": "см.",
+              "targets": [
+                "aberacii"
+              ]
+            }
+          ]
+        },
+        {
+          "type": "sentence_divider",
+          "text": "."
+        }
+      ],
+      "meta": {
+        "template": "default"
+      }
+    },
+    {
+      "headword": {
+        "raw_form": "[aberaci|o]",
+        "lemmas": [
+          {
+            "raw": "aberaci|o",
+            "lemma": "aberacio"
+          }
+        ],
+        "official_mark": null,
+        "homonym": null
+      },
+      "body": [
+        {
+          "type": "translation",
+          "number": 1,
+          "content": [
+            {
+              "type": "label",
+              "text": "астр."
+            },
+            {
+              "type": "divider",
+              "text": ",",
+              "kind": "near_divider"
+            },
+            {
+              "type": "label",
+              "text": "физ."
+            },
+            {
+              "type": "text",
+              "style": "regular",
+              "text": "аберр`ация"
+            },
+            {
+              "type": "divider",
+              "kind": "near_divider",
+              "text": ","
+            },
+            {
+              "type": "text",
+              "style": "regular",
+              "text": "отклон`ение"
+            }
+          ]
+        },
+        {
+          "type": "illustration",
+          "eo": "sfera aberacio",
+          "ru_segments": [
+            {
+              "text": "сфер`ическая аберр`ация",
+              "kind": "term"
+            },
+            {
+              "text": ";",
+              "kind": "far_divider"
+            }
+          ],
+          "eo_raw": "sfera ~o",
+          "eo_expanded": [
+            "sfera aberacio"
+          ]
+        },
+        {
+          "type": "illustration",
+          "eo": "kromata aberacio",
+          "ru_segments": [
+            {
+              "text": "хромат`ическая аберр`ация",
+              "kind": "term"
+            },
+            {
+              "text": ";",
+              "kind": "far_divider"
+            }
+          ],
+          "eo_raw": "kromata ~o",
+          "eo_expanded": [
+            "kromata aberacio"
+          ]
+        },
+        {
+          "type": "translation",
+          "number": 2,
+          "content": [
+            {
+              "type": "label",
+              "text": "биол."
+            },
+            {
+              "type": "divider",
+              "text": ",",
+              "kind": "near_divider"
+            },
+            {
+              "type": "label",
+              "text": "мед."
+            },
+            {
+              "type": "text",
+              "style": "regular",
+              "text": "аберр`ация"
+            },
+            {
+              "type": "divider",
+              "kind": "near_divider",
+              "text": ","
+            },
+            {
+              "type": "text",
+              "style": "regular",
+              "text": "отклон`ение (от н`ормы)"
+            }
+          ],
+          "children": [
+            {
+              "type": "illustration",
+              "eo": "aberacio de la sensoj",
+              "ru_segments": [
+                {
+                  "text": "аберр`ация ч`увств",
+                  "kind": "term"
+                },
+                {
+                  "text": ";",
+                  "kind": "far_divider"
+                }
+              ],
+              "eo_raw": "~o de la sensoj",
+              "eo_expanded": [
+                "aberacio de la sensoj"
+              ]
+            }
+          ],
+          "meta": {
+            "search_terms": [
+              "отклон`ение",
+              "отклон`ение от н`ормы"
+            ]
+          }
+        },
+        {
+          "type": "headword",
+          "raw_form": "[~a]",
+          "lemmas": [
+            {
+              "raw": "~a",
+              "lemma": "aberacia"
+            }
+          ],
+          "official_mark": null,
+          "homonym": null,
+          "children": [
+            {
+              "type": "translation",
+              "content": [
+                {
+                  "type": "text",
+                  "style": "regular",
+                  "text": "аберраци`онный"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "headword",
+          "raw_form": "[~i]",
+          "lemmas": [
+            {
+              "raw": "~i",
+              "lemma": "aberacii"
+            }
+          ],
+          "official_mark": null,
+          "homonym": null,
+          "children": [
+            {
+              "type": "translation",
+              "content": [
+                {
+                  "type": "text",
+                  "style": "regular",
+                  "text": "аберр`ировать"
+                },
+                {
+                  "type": "divider",
+                  "kind": "near_divider",
+                  "text": ","
+                },
+                {
+                  "type": "text",
+                  "style": "regular",
+                  "text": "дав`ать аберр`ацию"
+                }
+              ]
+            },
+            {
+              "type": "sentence_divider",
+              "text": "."
+            }
+          ]
+        }
+      ],
+      "meta": {
+        "template": "lexeme_numbered",
+        "sections": [
+          {
+            "role": "main",
+            "body_indexes": [
+              0,
+              1,
+              2,
+              3
+            ]
+          },
+          {
+            "role": "wordform",
+            "body_index": 4,
+            "raw_form": "[~a]"
+          },
+          {
+            "role": "wordform",
+            "body_index": 5,
+            "raw_form": "[~i]"
+          }
+        ]
+      }
+    },
+    {
+      "headword": {
+        "raw_form": "[Aberden|o]",
+        "lemmas": [
+          {
+            "raw": "Aberden|o",
+            "lemma": "Aberdeno"
+          }
+        ],
+        "official_mark": null,
+        "homonym": null
+      },
+      "body": [
+        {
+          "type": "translation",
+          "content": [
+            {
+              "type": "label",
+              "text": "сомнит."
+            },
+            {
+              "type": "divider",
+              "text": ";",
+              "kind": "far_divider"
+            },
+            {
+              "type": "label",
+              "text": "гп."
+            },
+            {
+              "type": "text",
+              "style": "regular",
+              "text": "`Аберд`ин"
+            }
+          ]
+        },
+        {
+          "type": "note",
+          "content": [
+            {
+              "type": "text",
+              "style": "italic",
+              "text": "(город в Великобритании)"
+            }
+          ]
+        },
+        {
+          "type": "headword",
+          "raw_form": "[~i/o]",
+          "lemmas": [
+            {
+              "raw": "~i/o",
+              "lemma": "Aberdenio"
+            }
+          ],
+          "official_mark": null,
+          "homonym": null,
+          "children": [
+            {
+              "type": "translation",
+              "content": [
+                {
+                  "type": "text",
+                  "style": "regular",
+                  "text": "`Аберд`ин"
+                }
+              ]
+            },
+            {
+              "type": "note",
+              "content": [
+                {
+                  "type": "text",
+                  "style": "italic",
+                  "text": "(графство в Великобритании)"
+                }
+              ]
+            },
+            {
+              "type": "sentence_divider",
+              "text": "."
+            }
+          ]
+        }
+      ],
+      "meta": {
+        "template": "default"
+      }
+    },
+    {
+      "headword": {
+        "raw_form": "[abesiv/o]",
+        "lemmas": [
+          {
+            "raw": "abesiv/o",
+            "lemma": "abesivo"
+          }
+        ],
+        "official_mark": null,
+        "homonym": null
+      },
+      "body": [
+        {
+          "type": "translation",
+          "content": [
+            {
+              "type": "label",
+              "text": "грам."
+            },
+            {
+              "type": "text",
+              "style": "regular",
+              "text": "абесс`ив"
+            },
+            {
+              "type": "divider",
+              "kind": "near_divider",
+              "text": ","
+            },
+            {
+              "type": "text",
+              "style": "regular",
+              "text": "лиш`ительный пад`еж"
+            }
+          ]
+        },
+        {
+          "type": "sentence_divider",
+          "text": "."
+        }
+      ],
+      "meta": {
+        "template": "default"
+      }
+    },
+    {
+      "headword": {
+        "raw_form": "[abevili/o]",
+        "lemmas": [
+          {
+            "raw": "abevili/o",
+            "lemma": "abevilio"
+          }
+        ],
+        "official_mark": null,
+        "homonym": null
+      },
+      "body": [
+        {
+          "type": "translation",
+          "content": [
+            {
+              "type": "label",
+              "text": "археол."
+            },
+            {
+              "type": "text",
+              "style": "regular",
+              "text": "аббев`ильская, ш`елльская, древнеаш`ельская эп`оха; аббев`ильская, ш`елльская, древнеаш`ельская культ`ура"
+            }
+          ],
+          "ru_requires_review": true,
+          "meta": {
+            "raw_ru_text": "аббев`ильская, ш`елльская, древнеаш`ельская эп`оха; аббев`ильская, ш`елльская, древнеаш`ельская культ`ура"
+          }
+        },
+        {
+          "type": "sentence_divider",
+          "text": "."
+        }
+      ],
+      "meta": {
+        "template": "default"
+      }
+    },
+    {
+      "headword": {
+        "raw_form": "[abĥaz|o]",
+        "lemmas": [
+          {
+            "raw": "abĥaz|o",
+            "lemma": "abĥazo"
+          }
+        ],
+        "official_mark": null,
+        "homonym": null
+      },
+      "body": [
+        {
+          "type": "translation",
+          "content": [
+            {
+              "type": "text",
+              "style": "regular",
+              "text": "абх`аз"
+            },
+            {
+              "type": "divider",
+              "kind": "near_divider",
+              "text": ","
+            },
+            {
+              "type": "text",
+              "style": "regular",
+              "text": "абх`азец"
+            }
+          ]
+        },
+        {
+          "type": "headword",
+          "raw_form": "[~a]",
+          "lemmas": [
+            {
+              "raw": "~a",
+              "lemma": "abĥaza"
+            }
+          ],
+          "official_mark": null,
+          "homonym": null,
+          "children": [
+            {
+              "type": "translation",
+              "content": [
+                {
+                  "type": "text",
+                  "style": "regular",
+                  "text": "абх`азский"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "headword",
+          "raw_form": "[~e]",
+          "lemmas": [
+            {
+              "raw": "~e",
+              "lemma": "abĥaze"
+            }
+          ],
+          "official_mark": null,
+          "homonym": null,
+          "children": [
+            {
+              "type": "translation",
+              "content": [
+                {
+                  "type": "text",
+                  "style": "regular",
+                  "text": "по-абх`азски"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "headword",
+          "raw_form": "[~in/o]",
+          "lemmas": [
+            {
+              "raw": "~in/o",
+              "lemma": "abĥazino"
+            }
+          ],
+          "official_mark": null,
+          "homonym": null,
+          "children": [
+            {
+              "type": "translation",
+              "content": [
+                {
+                  "type": "text",
+                  "style": "regular",
+                  "text": "абх`азка"
+                }
+              ]
+            },
+            {
+              "type": "sentence_divider",
+              "text": "."
+            }
+          ]
+        }
+      ],
+      "meta": {
+        "template": "default"
+      }
+    },
+    {
+      "headword": {
+        "raw_form": "[Abĥaz/i/o, Abĥaz/uj/o]",
+        "lemmas": [
+          {
+            "raw": "Abĥaz/i/o",
+            "lemma": "Abĥazio"
+          },
+          {
+            "raw": "Abĥaz/uj/o",
+            "lemma": "Abĥazujo"
+          }
+        ],
+        "official_mark": null,
+        "homonym": null
+      },
+      "body": [
+        {
+          "type": "translation",
+          "content": [
+            {
+              "type": "label",
+              "text": "гп."
+            },
+            {
+              "type": "text",
+              "style": "regular",
+              "text": "Абх`азия"
+            }
+          ]
+        },
+        {
+          "type": "sentence_divider",
+          "text": "."
+        }
+      ],
+      "meta": {
+        "template": "default"
+      }
+    },
+    {
+      "headword": {
+        "raw_form": "[abi|o]",
+        "lemmas": [
+          {
+            "raw": "abi|o",
+            "lemma": "abio"
+          }
+        ],
+        "official_mark": "UV",
+        "homonym": null
+      },
+      "body": [
+        {
+          "type": "translation",
+          "content": [
+            {
+              "type": "label",
+              "text": "бот."
+            },
+            {
+              "type": "text",
+              "style": "regular",
+              "text": "п`ихта"
+            }
+          ]
+        },
+        {
+          "type": "illustration",
+          "eo": "blanka abio",
+          "ru_segments": [
+            {
+              "text": "п`ихта б`елая",
+              "kind": "term"
+            },
+            {
+              "text": ";",
+              "kind": "far_divider"
+            }
+          ],
+          "eo_raw": "blanka ~o",
+          "eo_expanded": [
+            "blanka abio"
+          ]
+        },
+        {
+          "type": "illustration",
+          "eo": "balzama abio",
+          "ru_segments": [
+            {
+              "text": "п`ихта бальзам`ическая",
+              "kind": "term"
+            },
+            {
+              "text": ";",
+              "kind": "far_divider"
+            }
+          ],
+          "eo_raw": "balzama ~o",
+          "eo_expanded": [
+            "balzama abio"
+          ]
+        },
+        {
+          "type": "illustration",
+          "eo": "hispania abio",
+          "ru_segments": [
+            {
+              "text": "п`ихта исп`анская",
+              "kind": "term"
+            },
+            {
+              "text": ";",
+              "kind": "far_divider"
+            }
+          ],
+          "eo_raw": "hispania ~o",
+          "eo_expanded": [
+            "hispania abio"
+          ]
+        },
+        {
+          "type": "illustration",
+          "eo": "siberia abio",
+          "ru_segments": [
+            {
+              "text": "п`ихта сиб`ирская",
+              "kind": "term"
+            },
+            {
+              "text": ";",
+              "kind": "far_divider"
+            }
+          ],
+          "eo_raw": "siberia ~o",
+          "eo_expanded": [
+            "siberia abio"
+          ]
+        },
+        {
+          "type": "illustration",
+          "eo": "skvama abio",
+          "ru_segments": [
+            {
+              "text": "п`ихта чеш`уйчатая",
+              "kind": "term"
+            },
+            {
+              "text": ";",
+              "kind": "far_divider"
+            }
+          ],
+          "eo_raw": "skvama ~o",
+          "eo_expanded": [
+            "skvama abio"
+          ]
+        },
+        {
+          "type": "note",
+          "content": [
+            {
+              "type": "text",
+              "style": "italic",
+              "text": "прим. в обиходном языке слово abio часто употребляется по отношению к ели обыкновенной, или европейской (= abi(o)piceo); в частности, это имеет место по отношению к новогодней и рождественской ёлке"
+            },
+            {
+              "type": "text",
+              "style": "regular",
+              "text": ";"
+            }
+          ]
+        },
+        {
+          "type": "headword",
+          "raw_form": "[~a]",
+          "lemmas": [
+            {
+              "raw": "~a",
+              "lemma": "abia"
+            }
+          ],
+          "official_mark": null,
+          "homonym": null,
+          "children": [
+            {
+              "type": "translation",
+              "content": [
+                {
+                  "type": "text",
+                  "style": "regular",
+                  "text": "п`ихтовый"
+                }
+              ]
+            },
+            {
+              "type": "note",
+              "content": [
+                {
+                  "type": "text",
+                  "style": "italic",
+                  "text": "прим. в обиходном языке данное прилагательное часто употребляется по отношению к ели обыкновенной, или европейской, и в этом случае переводится как «еловый»"
+                },
+                {
+                  "type": "text",
+                  "style": "regular",
+                  "text": ";"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "headword",
+          "raw_form": "[~ar/o]",
+          "lemmas": [
+            {
+              "raw": "~ar/o",
+              "lemma": "abiaro"
+            }
+          ],
+          "official_mark": null,
+          "homonym": null,
+          "children": [
+            {
+              "type": "translation",
+              "content": [
+                {
+                  "type": "text",
+                  "style": "regular",
+                  "text": "п`ихтовый лес"
+                },
+                {
+                  "type": "divider",
+                  "kind": "near_divider",
+                  "text": ","
+                },
+                {
+                  "type": "text",
+                  "style": "regular",
+                  "text": "пихт`овник"
+                },
+                {
+                  "type": "divider",
+                  "kind": "near_divider",
+                  "text": ","
+                },
+                {
+                  "type": "text",
+                  "style": "regular",
+                  "text": "пихт`арник"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "headword",
+          "raw_form": "[~ej/o]",
+          "lemmas": [
+            {
+              "raw": "~ej/o",
+              "lemma": "abiejo"
+            }
+          ],
+          "official_mark": null,
+          "homonym": null,
+          "children": [
+            {
+              "type": "translation",
+              "content": [
+                {
+                  "type": "text",
+                  "style": "regular",
+                  "text": "пор`осшее п`ихтами м`есто"
+                }
+              ]
+            },
+            {
+              "type": "sentence_divider",
+              "text": "."
+            }
+          ]
+        }
+      ],
+      "meta": {
+        "template": "default"
+      }
+    },
+    {
+      "headword": {
+        "raw_form": "[abietin|o]",
+        "lemmas": [
+          {
+            "raw": "abietin|o",
+            "lemma": "abietino"
+          }
+        ],
+        "official_mark": null,
+        "homonym": null
+      },
+      "body": [
+        {
+          "type": "translation",
+          "content": [
+            {
+              "type": "label",
+              "text": "хим."
+            },
+            {
+              "type": "text",
+              "style": "regular",
+              "text": "абиет`ин"
+            }
+          ]
+        },
+        {
+          "type": "headword",
+          "raw_form": "[~a]",
+          "lemmas": [
+            {
+              "raw": "~a",
+              "lemma": "abietina"
+            }
+          ],
+          "official_mark": null,
+          "homonym": null,
+          "children": [
+            {
+              "type": "translation",
+              "content": [
+                {
+                  "type": "text",
+                  "style": "regular",
+                  "text": "абиет`иновый"
+                }
+              ]
+            },
+            {
+              "type": "sentence_divider",
+              "text": "."
+            }
+          ]
+        }
+      ],
+      "meta": {
+        "template": "default"
+      }
+    },
+    {
+      "headword": {
+        "raw_form": "[Abiĝan/o]",
+        "lemmas": [
+          {
+            "raw": "Abiĝan/o",
+            "lemma": "Abiĝano"
+          }
+        ],
+        "official_mark": null,
+        "homonym": null
+      },
+      "body": [
+        {
+          "type": "translation",
+          "content": [
+            {
+              "type": "label",
+              "text": "сомнит."
+            },
+            {
+              "type": "divider",
+              "text": ";",
+              "kind": "far_divider"
+            },
+            {
+              "type": "label",
+              "text": "гп."
+            },
+            {
+              "type": "text",
+              "style": "regular",
+              "text": "Абидж`ан"
+            }
+          ]
+        },
+        {
+          "type": "sentence_divider",
+          "text": "."
+        }
+      ],
+      "meta": {
+        "template": "default"
+      }
+    },
+    {
+      "headword": {
+        "raw_form": "[abi/konus/o]",
+        "lemmas": [
+          {
+            "raw": "abi/konus/o",
+            "lemma": "abikonuso"
+          }
+        ],
+        "official_mark": null,
+        "homonym": null
+      },
+      "body": [
+        {
+          "type": "translation",
+          "content": [
+            {
+              "type": "text",
+              "style": "regular",
+              "text": "ел`овая ш`ишка"
+            }
+          ]
+        },
+        {
+          "type": "sentence_divider",
+          "text": "."
+        }
+      ],
+      "meta": {
+        "template": "default"
+      }
+    },
+    {
+      "headword": {
+        "raw_form": "[abiogenez/o]",
+        "lemmas": [
+          {
+            "raw": "abiogenez/o",
+            "lemma": "abiogenezo"
+          }
+        ],
+        "official_mark": null,
+        "homonym": null
+      },
+      "body": [
+        {
+          "type": "translation",
+          "content": [
+            {
+              "type": "label",
+              "text": "биол."
+            },
+            {
+              "type": "text",
+              "style": "regular",
+              "text": "абиоген`ез"
+            }
+          ]
+        },
+        {
+          "type": "sentence_divider",
+          "text": "."
+        }
+      ],
+      "meta": {
+        "template": "default"
+      }
+    },
+    {
+      "headword": {
+        "raw_form": "[abi/(o)/pice/o]",
+        "lemmas": [
+          {
+            "raw": "abi/(o)/pice/o",
+            "lemma": "abipiceo"
+          },
+          {
+            "raw": "abi/(o)/pice/o",
+            "lemma": "abiopiceo"
+          }
+        ],
+        "official_mark": null,
+        "homonym": null
+      },
+      "body": [
+        {
+          "type": "translation",
+          "content": [
+            {
+              "type": "label",
+              "text": "бот."
+            },
+            {
+              "type": "text",
+              "style": "italic",
+              "text": "(или"
+            },
+            {
+              "type": "text",
+              "style": "regular",
+              "text": "ель обыкнов`енная европ`ейская)"
+            }
+          ]
+        },
+        {
+          "type": "illustration",
+          "content": [
+            {
+              "type": "note",
+              "text": "= ordinara piceo"
+            },
+            {
+              "type": "divider",
+              "text": "."
+            }
+          ]
+        }
+      ],
+      "meta": {
+        "template": "default"
+      }
+    },
+    {
+      "headword": {
+        "raw_form": "[abisen|o]",
+        "lemmas": [
+          {
+            "raw": "abisen|o",
+            "lemma": "abiseno"
+          }
+        ],
+        "official_mark": null,
+        "homonym": null
+      },
+      "body": [
+        {
+          "type": "translation",
+          "content": [
+            {
+              "type": "text",
+              "style": "regular",
+              "text": "абисс`инец"
+            }
+          ]
+        },
+        {
+          "type": "note",
+          "content": [
+            {
+              "type": "text",
+              "style": "italic",
+              "text": "(устаревшее название эфиопа)"
+            }
+          ]
+        },
+        {
+          "type": "reference",
+          "mode": "compare",
+          "text": "ср.",
+          "targets": [
+            "etiopo"
+          ]
+        },
+        {
+          "type": "headword",
+          "raw_form": "[~a]",
+          "lemmas": [
+            {
+              "raw": "~a",
+              "lemma": "abisena"
+            }
+          ],
+          "official_mark": null,
+          "homonym": null,
+          "children": [
+            {
+              "type": "translation",
+              "content": [
+                {
+                  "type": "text",
+                  "style": "regular",
+                  "text": "абисс`инский"
+                }
+              ]
+            },
+            {
+              "type": "sentence_divider",
+              "text": "."
+            }
+          ]
+        }
+      ],
+      "meta": {
+        "template": "default"
+      }
+    },
+    {
+      "headword": {
+        "raw_form": "[Abisen/i/o, Abisen/uj/o]",
+        "lemmas": [
+          {
+            "raw": "Abisen/i/o",
+            "lemma": "Abisenio"
+          },
+          {
+            "raw": "Abisen/uj/o",
+            "lemma": "Abisenujo"
+          }
+        ],
+        "official_mark": null,
+        "homonym": null
+      },
+      "body": [
+        {
+          "type": "translation",
+          "content": [
+            {
+              "type": "label",
+              "text": "гп."
+            },
+            {
+              "type": "text",
+              "style": "regular",
+              "text": "Абисс`иния"
+            }
+          ]
+        },
+        {
+          "type": "explanation",
+          "content": [
+            {
+              "type": "text",
+              "style": "italic",
+              "text": "(устаревшее название Эфиопии)"
+            },
+            {
+              "type": "text",
+              "style": "regular",
+              "text": "; "
+            },
+            {
+              "type": "text",
+              "style": "italic",
+              "text": "ср."
+            },
+            {
+              "type": "text",
+              "style": "regular",
+              "text": " <Etiopio>."
+            }
+          ]
+        }
+      ],
+      "meta": {
+        "template": "default"
+      }
+    },
+    {
+      "headword": {
+        "raw_form": "[abism|o]",
+        "lemmas": [
+          {
+            "raw": "abism|o",
+            "lemma": "abismo"
+          }
+        ],
+        "official_mark": "OA1",
+        "homonym": null
+      },
+      "body": [
+        {
+          "type": "translation",
+          "number": 1,
+          "content": [
+            {
+              "type": "label",
+              "text": "прям."
+            },
+            {
+              "type": "divider",
+              "text": ",",
+              "kind": "near_divider"
+            },
+            {
+              "type": "label",
+              "text": "перен."
+            },
+            {
+              "type": "text",
+              "style": "regular",
+              "text": "пр`опасть"
+            },
+            {
+              "type": "divider",
+              "kind": "near_divider",
+              "text": ","
+            },
+            {
+              "type": "text",
+              "style": "regular",
+              "text": "б`ездна"
+            },
+            {
+              "type": "divider",
+              "kind": "near_divider",
+              "text": ","
+            },
+            {
+              "type": "text",
+              "style": "regular",
+              "text": "пуч`ина"
+            }
+          ]
+        },
+        {
+          "type": "translation",
+          "number": 2,
+          "content": [
+            {
+              "type": "label",
+              "text": "геогр."
+            },
+            {
+              "type": "text",
+              "style": "regular",
+              "text": "абисс`аль"
+            },
+            {
+              "type": "divider",
+              "kind": "near_divider",
+              "text": ","
+            },
+            {
+              "type": "text",
+              "style": "regular",
+              "text": "`область больш`их глуб`ин"
+            }
+          ]
+        },
+        {
+          "type": "headword",
+          "raw_form": "[~a]",
+          "lemmas": [
+            {
+              "raw": "~a",
+              "lemma": "abisma"
+            }
+          ],
+          "official_mark": null,
+          "homonym": null,
+          "children": [
+            {
+              "type": "translation",
+              "number": 1,
+              "content": [
+                {
+                  "type": "text",
+                  "style": "regular",
+                  "text": "безд`онный"
+                },
+                {
+                  "type": "divider",
+                  "kind": "near_divider",
+                  "text": ","
+                },
+                {
+                  "type": "text",
+                  "style": "regular",
+                  "text": "глуб`окий как пр`опасть"
+                }
+              ]
+            },
+            {
+              "type": "translation",
+              "number": 2,
+              "content": [
+                {
+                  "type": "label",
+                  "text": "геогр."
+                },
+                {
+                  "type": "text",
+                  "style": "regular",
+                  "text": "абисс`альный"
+                },
+                {
+                  "type": "divider",
+                  "kind": "near_divider",
+                  "text": ","
+                },
+                {
+                  "type": "text",
+                  "style": "regular",
+                  "text": "глуб`инный"
+                }
+              ],
+              "children": [
+                {
+                  "type": "note",
+                  "content": [
+                    {
+                      "type": "text",
+                      "style": "italic",
+                      "text": "(находящийся в море на глубине более 2000 м)"
+                    }
+                  ]
+                },
+                {
+                  "type": "illustration",
+                  "eo": "la abisma faŭno",
+                  "ru_segments": [
+                    {
+                      "text": "глуб`инная ф`ауна",
+                      "kind": "term"
+                    },
+                    {
+                      "text": ".",
+                      "kind": "sentence_divider"
+                    }
+                  ],
+                  "eo_raw": "la ~a faŭno",
+                  "eo_expanded": [
+                    "la abisma faŭno"
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "meta": {
+        "template": "lexeme_numbered",
+        "sections": [
+          {
+            "role": "main",
+            "body_indexes": [
+              0,
+              1
+            ]
+          },
+          {
+            "role": "wordform",
+            "body_index": 2,
+            "raw_form": "[~a]"
+          }
+        ]
+      }
+    }
+  ]
+}

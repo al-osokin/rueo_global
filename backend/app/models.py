@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import DateTime, Enum, ForeignKey, Index, Integer, String, Text, func, UniqueConstraint
+from sqlalchemy import DateTime, Enum, ForeignKey, Index, Integer, String, Text, func, UniqueConstraint, JSON
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -159,4 +159,26 @@ class User(Base):
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=False), nullable=False, server_default=func.now()
+    )
+
+
+class ArticleParseState(Base):
+    __tablename__ = "article_parse_state"
+    __table_args__ = (UniqueConstraint("lang", "art_id", name="uq_article_parse_state"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    lang: Mapped[str] = mapped_column(String(4), nullable=False)
+    art_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    parsing_status: Mapped[str] = mapped_column(String(32), nullable=False, default="pending")
+    template: Mapped[Optional[str]] = mapped_column(String(128))
+    headword: Mapped[Optional[str]] = mapped_column(String(512))
+    example_count: Mapped[Optional[int]] = mapped_column(Integer)
+    first_example_eo: Mapped[Optional[str]] = mapped_column(Text)
+    first_example_ru: Mapped[Optional[str]] = mapped_column(Text)
+    parsed_payload: Mapped[Optional[dict]] = mapped_column(JSON)
+    parsed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=False),
+        nullable=False,
+        server_default=func.now(),
+        onupdate=func.now(),
     )
