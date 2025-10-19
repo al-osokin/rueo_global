@@ -10,7 +10,7 @@ const manifest = self.__WB_MANIFEST || [];
 
 // ВАЖНО: Версия должна совпадать с версией в package.json
 // При изменении версии в package.json также обновите эту константу
-const CACHE_VERSION = 'v1.0.0';
+const CACHE_VERSION = 'v1.0.1';
 const CACHE_NAME = `quasar-pwa-${CACHE_VERSION}`;
 const API_CACHE_NAME = `quasar-pwa-api-${CACHE_VERSION}`;
 
