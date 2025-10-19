@@ -114,14 +114,35 @@ class SearchService:
 
         search_model = SearchEntry if language == "eo" else SearchEntryRu
 
+        variants = {target}
+        if target:
+            variants.update(
+                {
+                    target.lower(),
+                    target.upper(),
+                    target.capitalize(),
+                    target.title(),
+                }
+            )
+
+        prefixes = {variant for variant in variants if variant}
+        if not prefixes:
+            return []
+
+        patterns: set[str] = set()
+        for variant in prefixes:
+            patterns.add(variant)
+            patterns.add(f"-{variant}")
+            patterns.add(f"<<{variant}")
+
+        like_conditions = [
+            search_model.vorto.like(f"{pattern}%") for pattern in patterns
+        ]
+
         stmt = (
             select(search_model.vorto, search_model.art_id, search_model.id)
             .where(
-                or_(
-                    search_model.vorto.like(f"{target}%"),
-                    search_model.vorto.like(f"-{target}%"),
-                    search_model.vorto.like(f"<<{target}%"),
-                )
+                or_(*like_conditions)
             )
             .order_by(search_model.id.asc())
         ).limit(60)
