@@ -1,0 +1,444 @@
+<template>
+  <q-page class="q-pa-md q-gutter-lg admin-review">
+    <div class="row q-col-gutter-lg">
+      <div class="col-12 col-md-4">
+        <q-card flat bordered>
+          <q-card-section class="column q-gutter-md">
+            <div class="text-h6">Поиск статьи</div>
+            <q-select
+              v-model="lang"
+              :options="langOptions"
+              label="Язык"
+              dense
+              outlined
+            />
+            <q-select
+              v-model="selectedArtId"
+              :options="suggestions"
+              :loading="loadingSuggestions"
+              use-input
+              hide-selected
+              fill-input
+              emit-value
+              map-options
+              dense
+              outlined
+              label="Начните вводить заголовок"
+              @filter="onFilter"
+              @update:model-value="loadArticle"
+            >
+              <template #no-option>
+                <q-item>
+                  <q-item-section class="text-grey">
+                    Нет совпадений
+                  </q-item-section>
+                </q-item>
+              </template>
+            </q-select>
+            <q-toggle
+              v-model="showPendingOnly"
+              label="Только требующие проверки"
+              dense
+            />
+            <q-input
+              v-model.number="directArtId"
+              label="Перейти по art_id"
+              type="number"
+              dense
+              outlined
+              clearable
+            >
+              <template #append>
+                <q-btn
+                  flat
+                  round
+                  icon="arrow_forward"
+                  :disable="!directArtId"
+                  @click="() => loadArticle(directArtId)"
+                />
+              </template>
+            </q-input>
+            <div class="row q-gutter-sm">
+              <q-btn
+                color="primary"
+                outline
+                label="Следующая проблемная"
+                icon="fact_check"
+                :disable="saving"
+                @click="() => loadNextPending(article ? article.art_id : null)"
+              />
+              <q-btn
+                color="secondary"
+                outline
+                label="Случайная проверка"
+                icon="shuffle"
+                :disable="saving"
+                @click="loadSpotCheck"
+              />
+            </div>
+          </q-card-section>
+        </q-card>
+        <q-card flat bordered class="q-mt-lg" v-if="article && article.review_notes.length">
+          <q-card-section>
+            <div class="text-subtitle1">Заметки парсера</div>
+            <q-list dense>
+              <q-item v-for="(note, idx) in article.review_notes" :key="idx">
+                <q-item-section>{{ note }}</q-item-section>
+              </q-item>
+            </q-list>
+          </q-card-section>
+        </q-card>
+        <q-card flat bordered class="q-mt-lg" v-if="article && article.notes.length">
+          <q-card-section>
+            <div class="text-subtitle1">Комментарии</div>
+            <q-list dense>
+              <q-item v-for="note in article.notes" :key="note.id">
+                <q-item-section>
+                  <div class="text-body2">{{ note.body }}</div>
+                  <div class="text-caption text-grey-6">
+                    <span v-if="note.author">{{ note.author }} · </span>{{ formatDate(note.created_at) }}
+                  </div>
+                </q-item-section>
+              </q-item>
+            </q-list>
+          </q-card-section>
+        </q-card>
+      </div>
+      <div class="col-12 col-md-8">
+        <q-card flat bordered v-if="article">
+          <q-card-section class="q-gutter-sm">
+            <div class="text-h6">{{ article.headword }}</div>
+            <div class="text-caption text-grey-7">
+              Шаблон: {{ article.template || '—' }} · Статус: {{ article.parsing_status }}
+            </div>
+          </q-card-section>
+          <q-separator />
+          <q-card-section class="q-gutter-md">
+            <div
+              v-for="group in groups"
+              :key="group.group_id"
+              class="q-pa-sm q-border rounded-borders"
+              :class="{
+                'bg-amber-1': group.auto_generated,
+                'bg-red-1': group.requires_review && !group.accepted,
+              }"
+            >
+              <div class="row items-center justify-between">
+                <div>
+                  <span class="text-weight-medium">
+                    {{ group.label || 'Перевод' }}
+                  </span>
+                  <q-chip
+                    v-if="group.section"
+                    dense
+                    color="blue-grey-2"
+                    text-color="blue-grey-9"
+                    class="q-ml-sm"
+                  >
+                    {{ group.section }}
+                  </q-chip>
+                  <q-chip v-if="group.requires_review" dense color="red" text-color="white" class="q-ml-sm">
+                    требуется проверка
+                  </q-chip>
+                  <q-chip v-if="group.auto_generated" dense color="orange" text-color="white" class="q-ml-sm">
+                    авто
+                  </q-chip>
+                </div>
+                <q-toggle
+                  v-model="group.accepted"
+                  size="sm"
+                  color="green"
+                  label="Принять"
+                />
+              </div>
+                <div class="text-body2 q-ml-sm">
+                  <div>
+                    <span class="text-grey-7">Варианты:</span>
+                    {{ group.items.join(', ') }}
+                  </div>
+                <div v-if="group.base_items.length" class="text-caption text-grey-7">
+                  Базовые: {{ group.base_items.join(', ') }}
+                </div>
+              </div>
+            </div>
+          </q-card-section>
+          <q-separator />
+          <q-card-section>
+            <q-input
+              v-model="comment"
+              type="textarea"
+              outlined
+              autogrow
+              label="Комментарий"
+              :disable="saving"
+            />
+          </q-card-section>
+          <q-card-actions align="between">
+            <q-btn
+              color="primary"
+              outline
+              icon="chevron_left"
+              label="Назад"
+              :disable="saving || !canGoBack"
+              @click="saveAndGo('prev')"
+            />
+            <q-btn
+              color="primary"
+              icon-right="chevron_right"
+              label="Дальше"
+              :loading="saving"
+              :disable="saving"
+              @click="saveAndGo('next')"
+            />
+          </q-card-actions>
+        </q-card>
+        <q-banner v-else class="bg-grey-2 text-grey-8">
+          Выберите статью для просмотра.
+        </q-banner>
+      </div>
+    </div>
+  </q-page>
+</template>
+
+<script setup>
+import { ref, reactive, watch, computed, onMounted } from "vue";
+import { useQuasar } from "quasar";
+import { api } from "boot/axios";
+
+const $q = useQuasar();
+
+const langOptions = [
+  { label: "Эсперанто", value: "eo" },
+  { label: "Русский", value: "ru" },
+];
+
+const lang = ref("eo");
+const suggestions = ref([]);
+const loadingSuggestions = ref(false);
+const selectedArtId = ref(null);
+const directArtId = ref(null);
+
+const article = ref(null);
+const groups = reactive([]);
+const comment = ref("");
+const saving = ref(false);
+const history = ref([]);
+const historyIndex = ref(-1);
+const showPendingOnly = ref(true);
+
+const canGoBack = computed(() => historyIndex.value > 0);
+
+const formatDate = (value) => {
+  if (!value) return "";
+  return new Date(value).toLocaleString();
+};
+
+const clearArticle = () => {
+  article.value = null;
+  groups.splice(0, groups.length);
+  comment.value = "";
+};
+
+watch(lang, () => {
+  suggestions.value = [];
+  selectedArtId.value = null;
+  directArtId.value = null;
+  clearArticle();
+  history.value = [];
+  historyIndex.value = -1;
+});
+
+watch(showPendingOnly, () => {
+  suggestions.value = [];
+});
+
+const onFilter = (val, update, abort) => {
+  if (!val || val.length < 2) {
+    update(() => {
+      suggestions.value = [];
+    });
+    return;
+  }
+
+  loadingSuggestions.value = true;
+  const params = { query: val };
+  if (showPendingOnly.value) {
+    params.status = "needs_review";
+  }
+  api
+    .get(`/admin/articles/${lang.value}`, {
+      params,
+    })
+    .then(({ data }) => {
+      update(() => {
+        suggestions.value = data.map((item) => ({
+          label: item.headword || `#${item.art_id}`,
+          value: item.art_id,
+          parsing_status: item.parsing_status,
+        }));
+      });
+    })
+    .catch((err) => {
+      console.error(err);
+      update(() => {
+        suggestions.value = [];
+      });
+      $q.notify({ type: "negative", message: "Не удалось получить подсказки" });
+    })
+    .finally(() => {
+      loadingSuggestions.value = false;
+    });
+};
+
+const prepareGroups = (payload) => {
+  groups.splice(0, groups.length);
+  (payload.groups || []).forEach((group) => {
+    groups.push({
+      group_id: group.group_id,
+      label: group.label,
+      items: group.items || [],
+      base_items: group.base_items || [],
+      requires_review: group.requires_review,
+      auto_generated: group.auto_generated,
+      section: group.section || null,
+      accepted: group.accepted,
+    });
+  });
+};
+
+const updateHistory = (artId, options = {}) => {
+  const { fromHistory = false, historyPosition } = options;
+  if (fromHistory) {
+    if (typeof historyPosition === "number") {
+      historyIndex.value = historyPosition;
+    }
+    return;
+  }
+
+  if (historyIndex.value >= 0 && history.value[historyIndex.value] === artId) {
+    return;
+  }
+
+  const cutoff = historyIndex.value + 1;
+  history.value = history.value.slice(0, cutoff);
+  history.value.push(artId);
+  historyIndex.value = history.value.length - 1;
+};
+
+const loadArticle = async (artId, options = {}) => {
+  if (!artId) return;
+  try {
+    const { data } = await api.get(`/admin/articles/${lang.value}/${artId}`);
+    article.value = data;
+    comment.value = "";
+    prepareGroups(data);
+    selectedArtId.value = artId;
+    updateHistory(artId, options);
+  } catch (err) {
+    console.error(err);
+    $q.notify({ type: "negative", message: "Не удалось загрузить статью" });
+  }
+};
+
+const buildResolvedPayload = () => {
+  const resolved = article.value?.resolved_translations || {};
+  const result = {
+    ...(resolved || {}),
+    auto_candidates: article.value?.auto_candidates || [],
+    groups: {},
+  };
+  groups.forEach((group) => {
+    result.groups[group.group_id] = {
+      accepted: !!group.accepted,
+    };
+  });
+  return result;
+};
+
+const loadNextPending = async (afterId = null) => {
+  try {
+    const params = { mode: "next" };
+    if (afterId != null) {
+      params.after = afterId;
+    }
+    const { data } = await api.get(`/admin/articles/${lang.value}/queue`, {
+      params,
+    });
+    if (data?.art_id) {
+      await loadArticle(data.art_id);
+    } else {
+      $q.notify({ type: "info", message: "Все статьи просмотрены" });
+    }
+  } catch (err) {
+    console.error(err);
+    $q.notify({ type: "negative", message: "Не удалось получить следующую статью" });
+  }
+};
+
+const loadSpotCheck = async () => {
+  try {
+    const { data } = await api.get(`/admin/articles/${lang.value}/queue`, {
+      params: { mode: "spotcheck" },
+    });
+    if (data?.art_id) {
+      await loadArticle(data.art_id);
+    } else {
+      $q.notify({ type: "info", message: "Нет статей для проверки" });
+    }
+  } catch (err) {
+    console.error(err);
+    $q.notify({ type: "negative", message: "Не удалось получить статью" });
+  }
+};
+
+const saveAndGo = async (direction = "next") => {
+  if (!article.value) {
+    return;
+  }
+
+  if (direction === "prev" && historyIndex.value <= 0) {
+    return;
+  }
+
+  saving.value = true;
+  try {
+    const payload = {
+      resolved_translations: buildResolvedPayload(),
+    };
+    if (comment.value && comment.value.trim().length) {
+      payload.comment = comment.value.trim();
+    }
+    await api.post(`/admin/articles/${lang.value}/${article.value.art_id}`, payload);
+    $q.notify({ type: "positive", message: "Сохранено" });
+    comment.value = "";
+    if (direction === "prev") {
+      const targetIndex = historyIndex.value - 1;
+      const prevId = history.value[targetIndex];
+      if (prevId !== undefined) {
+        await loadArticle(prevId, { fromHistory: true, historyPosition: targetIndex });
+      }
+      return;
+    }
+
+    if (direction === "next") {
+      await loadNextPending(article.value?.art_id || null);
+    }
+  } catch (err) {
+    console.error(err);
+    $q.notify({ type: "negative", message: "Не удалось сохранить" });
+  } finally {
+    saving.value = false;
+  }
+};
+
+onMounted(() => {
+  loadNextPending();
+});
+
+</script>
+
+<style scoped>
+.admin-review .q-border {
+  border: 1px solid var(--q-color-grey-4);
+}
+</style>

@@ -27,6 +27,7 @@ class ArticleParseResult:
     examples: List[Dict[str, Optional[str]]] = field(default_factory=list)
     example_count: int = 0
     translations: List[str] = field(default_factory=list)
+    needs_review: bool = False
     raw: Optional[Dict] = None
     error: Optional[str] = None
 
@@ -60,57 +61,12 @@ class ArticleParserService:
 
         rows = self.session.execute(stmt)
         for index, (art_id, content) in enumerate(rows, start=offset):
-            if not content:
-                yield ArticleParseResult(
-                    art_id=art_id,
-                    lang=lang,
-                    success=False,
-                    template=None,
-                    headword=None,
-                    examples=[],
-                    example_count=0,
-                    translations=[],
-                    raw=None,
-                    error="empty_content",
-                )
-                continue
-
-            try:
-                parsed = self.pipeline.parse_article(content, index=index)
-            except Exception as exc:  # pragma: no cover - defensive
-                yield ArticleParseResult(
-                    art_id=art_id,
-                    lang=lang,
-                    success=False,
-                    template=None,
-                    headword=None,
-                    examples=[],
-                    example_count=0,
-                    translations=[],
-                    raw=None,
-                    error=f"parse_error: {exc}",
-                )
-                continue
-
-            headword_info = parsed.get("headword") or {}
-            headword = headword_info.get("raw_form") or None
-            template = (parsed.get("meta") or {}).get("template")
-            success = bool(headword)
-            examples = self._extract_examples(parsed)
-            review = build_translation_review(parsed)
-            translations = collect_translation_phrases(review)
-
-            yield ArticleParseResult(
-                art_id=art_id,
+            yield self._build_result(
                 lang=lang,
-                success=success,
-                template=template,
-                headword=headword,
-                examples=examples,
-                example_count=len(examples),
-                translations=translations,
-                raw=parsed if include_raw else None,
-                error=None if success else "missing_headword",
+                art_id=art_id,
+                content=content,
+                index=index,
+                include_raw=include_raw,
             )
 
     def summarize(
@@ -136,7 +92,10 @@ class ArticleParserService:
         *,
         replace_payload: bool = False,
     ) -> None:
-        status = "parsed" if result.success else (result.error or "failed")
+        if not result.success:
+            status = result.error or "failed"
+        else:
+            status = "needs_review" if result.needs_review else "reviewed"
         state = self.session.execute(
             select(ArticleParseState).where(
                 ArticleParseState.lang == result.lang,
@@ -159,6 +118,12 @@ class ArticleParserService:
         else:
             state.first_example_eo = None
             state.first_example_ru = None
+
+        if result.translations:
+            resolved = state.resolved_translations or {}
+            if "auto_candidates" not in resolved:
+                resolved["auto_candidates"] = result.translations
+            state.resolved_translations = resolved
 
         if replace_payload:
             state.parsed_payload = result.raw
@@ -230,3 +195,89 @@ class ArticleParserService:
 
         _walk(parsed.get("body") or [])
         return [example for example in examples if example.get("eo") or example.get("ru")]
+
+    def _build_result(
+        self,
+        *,
+        lang: str,
+        art_id: int,
+        content: Optional[str],
+        index: int,
+        include_raw: bool,
+    ) -> ArticleParseResult:
+        if not content:
+            return ArticleParseResult(
+                art_id=art_id,
+                lang=lang,
+                success=False,
+                template=None,
+                headword=None,
+                examples=[],
+                example_count=0,
+                translations=[],
+                raw=None,
+                error="empty_content",
+            )
+
+        try:
+            parsed = self.pipeline.parse_article(content, index=index)
+        except Exception as exc:  # pragma: no cover - defensive
+            return ArticleParseResult(
+                art_id=art_id,
+                lang=lang,
+                success=False,
+                template=None,
+                headword=None,
+                examples=[],
+                example_count=0,
+                translations=[],
+                raw=None,
+                error=f"parse_error: {exc}",
+            )
+
+        headword_info = parsed.get("headword") or {}
+        headword = headword_info.get("raw_form") or None
+        template = (parsed.get("meta") or {}).get("template")
+        success = bool(headword)
+        examples = self._extract_examples(parsed)
+        review = build_translation_review(parsed)
+        translations = collect_translation_phrases(review)
+        needs_review = any(
+            group.requires_review or group.auto_generated for group in review.groups
+        )
+
+        return ArticleParseResult(
+            art_id=art_id,
+            lang=lang,
+            success=success,
+            template=template,
+            headword=headword,
+            examples=examples,
+            example_count=len(examples),
+            translations=translations,
+            needs_review=needs_review,
+            raw=parsed if include_raw else None,
+            error=None if success else "missing_headword",
+        )
+
+    def parse_article_by_id(
+        self,
+        lang: str,
+        art_id: int,
+        *,
+        include_raw: bool = False,
+    ) -> ArticleParseResult:
+        if lang not in SUPPORTED_LANGS:
+            raise ValueError(f"Unsupported language: {lang}")
+
+        model = Article if lang == "eo" else ArticleRu
+        content = self.session.execute(
+            select(model.priskribo).where(model.art_id == art_id)
+        ).scalar_one_or_none()
+        return self._build_result(
+            lang=lang,
+            art_id=art_id,
+            content=content,
+            index=art_id,
+            include_raw=include_raw,
+        )

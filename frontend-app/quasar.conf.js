@@ -109,6 +109,14 @@ module.exports = configure(function (ctx) {
           target: apiTarget,
           changeOrigin: true,
         },
+        "/admin/articles": {
+          target: apiTarget,
+          changeOrigin: true,
+        },
+        "/admin/articles/": {
+          target: apiTarget,
+          changeOrigin: true,
+        },
       },
     },
 

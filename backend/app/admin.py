@@ -2,12 +2,14 @@ from __future__ import annotations
 
 import threading
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, BackgroundTasks, HTTPException, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
 
 from app.importer import DEFAULT_DATA_DIR, get_last_ru_letter, run_import
+from app.database import get_session
+from app.services.article_review import ArticleReviewService
 
 
 class ImportRequest(BaseModel):
@@ -36,6 +38,38 @@ class ImportStatus(BaseModel):
 
 
 router = APIRouter(prefix="/admin", tags=["admin"])
+
+SUPPORTED_REVIEW_LANGS = {"eo", "ru"}
+
+
+class ArticleSearchItem(BaseModel):
+    art_id: int
+    headword: Optional[str]
+    parsing_status: Optional[str]
+
+
+class ArticleReviewPayload(BaseModel):
+    art_id: int
+    lang: str
+    headword: Optional[str]
+    template: Optional[str]
+    success: bool
+    parsing_status: Optional[str]
+    groups: List[Dict[str, Any]]
+    auto_candidates: List[str]
+    resolved_translations: Dict[str, Any]
+    notes: List[Dict[str, Any]]
+    review_notes: List[str]
+
+
+class ReviewUpdateRequest(BaseModel):
+    resolved_translations: Optional[Dict[str, Any]] = None
+    comment: Optional[str] = None
+    author: Optional[str] = None
+
+
+class ReviewUpdateResponse(BaseModel):
+    next_art_id: Optional[int]
 
 _state_lock = threading.Lock()
 _state = {
@@ -138,3 +172,62 @@ def _now_iso() -> str:
     from datetime import datetime, timezone
 
     return datetime.now(timezone.utc).isoformat()
+
+
+def _ensure_lang(lang: str) -> str:
+    if lang not in SUPPORTED_REVIEW_LANGS:
+        raise HTTPException(status_code=404, detail="Unsupported language")
+    return lang
+
+
+@router.get("/articles/{lang}", response_model=List[ArticleSearchItem])
+def search_articles(
+    lang: str,
+    query: Optional[str] = Query(None),
+    limit: int = Query(20, ge=1, le=100),
+    status: Optional[str] = Query(None),
+    session=Depends(get_session),
+):
+    _ensure_lang(lang)
+    service = ArticleReviewService(session)
+    return service.search_articles(lang, query, limit, status)
+
+
+@router.get("/articles/{lang}/queue", response_model=Optional[ArticleSearchItem])
+def next_article(
+    lang: str,
+    after: Optional[int] = Query(None),
+    mode: str = Query("next"),
+    session=Depends(get_session),
+):
+    _ensure_lang(lang)
+    service = ArticleReviewService(session)
+    if mode == "spotcheck":
+        return service.get_queue_item(lang, status="reviewed", random=True)
+    return service.get_queue_item(lang, status="needs_review", after=after)
+
+
+@router.get("/articles/{lang}/{art_id}", response_model=ArticleReviewPayload)
+def get_article_review(lang: str, art_id: int, session=Depends(get_session)):
+    _ensure_lang(lang)
+    service = ArticleReviewService(session)
+    return service.load_article(lang, art_id)
+
+
+@router.post("/articles/{lang}/{art_id}", response_model=ReviewUpdateResponse)
+def update_article_review(
+    lang: str,
+    art_id: int,
+    payload: ReviewUpdateRequest,
+    session=Depends(get_session),
+):
+    _ensure_lang(lang)
+    service = ArticleReviewService(session)
+    result = service.save_review(
+        lang,
+        art_id,
+        resolved_translations=payload.resolved_translations,
+        comment=payload.comment,
+        author=payload.author,
+    )
+    return ReviewUpdateResponse(**result)

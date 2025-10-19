@@ -16,6 +16,7 @@ const routes = [
       { path: 'guglo', name:'search', component: () => import('pages/guglo') },
       { path: 'social', name:'social', component: () => import('pages/social') },
       { path: 'novajxoj', name:'news', component: () => import('pages/novajxoj') },
+      { path: 'admin/review', name:'adminReview', component: () => import('pages/AdminReview.vue') },
 
 
     ]

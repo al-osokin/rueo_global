@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import re
 from collections import defaultdict
-from dataclasses import dataclass
+from collections import defaultdict
+from dataclasses import dataclass, field
 from typing import Dict, Iterable, List, Optional, Sequence, Tuple
 
 
@@ -13,6 +14,9 @@ class TranslationGroup:
     items: List[str]
     label: Optional[str] = None
     requires_review: bool = False
+    base_items: List[str] = field(default_factory=list)
+    auto_generated: bool = False
+    section: Optional[str] = None
 
     @property
     def is_empty(self) -> bool:
@@ -28,13 +32,47 @@ class TranslationReview:
 
 def build_translation_review(parsed_article: Dict) -> TranslationReview:
     headword = parsed_article.get("headword", {}).get("raw_form") or "<без заголовка>"
+    groups, notes = _collect_groups_from_blocks(parsed_article.get("body") or [], section=None)
+    return TranslationReview(headword=headword, groups=groups, notes=notes)
+
+
+def format_translation_review(review: TranslationReview) -> str:
+    lines = [review.headword]
+    for group in review.groups:
+        if group.is_empty:
+            continue
+        section_prefix = f"[{group.section}] " if group.section else ""
+        label_prefix = f"{group.label} " if group.label else ""
+        body = _format_group_items(group.items)
+        suffix = "  [?]" if group.requires_review else ""
+        lines.append(f"  ⮕ {section_prefix}{label_prefix}{body}{suffix}")
+    for note in review.notes:
+        lines.append(f"  ℹ {note}")
+    return "\n".join(lines)
+
+
+def _format_group_items(items: Sequence[str]) -> str:
+    cleaned = [_clean_spacing(item) for item in items if item]
+    cleaned = [item for item in cleaned if item]
+    if not cleaned:
+        return ""
+    if len(cleaned) == 1:
+        return cleaned[0]
+    return "[" + " | ".join(cleaned) + "]"
+
+
+def _collect_groups_from_blocks(blocks: Iterable[Dict], section: Optional[str]) -> Tuple[List[TranslationGroup], List[str]]:
     groups: List[TranslationGroup] = []
     notes: List[str] = []
-
     buffer_content: List[List[Dict]] = []
     buffer_requires_review = False
     buffer_continues = False
     pending_suffixes: List[str] = []
+
+    def _append_note(text: str) -> None:
+        if not text:
+            return
+        notes.append(f"{section}: {text}" if section else text)
 
     def _flush_buffer() -> None:
         nonlocal buffer_content, buffer_requires_review, buffer_continues, pending_suffixes
@@ -46,29 +84,48 @@ def build_translation_review(parsed_article: Dict) -> TranslationReview:
             combined.extend(chunk)
 
         label = _extract_label(combined)
-        synonym_groups, extra_notes = _split_translation_groups(combined)
-        notes.extend(extra_notes)
+        group_specs, extra_notes = _split_translation_groups(combined)
+        for note in extra_notes:
+            _append_note(note)
 
-        for index, items in enumerate(synonym_groups):
-            if not items or _is_pos_marker(items):
+        for index, spec in enumerate(group_specs):
+            base_items = spec.get("base", [])
+            expanded_items = spec.get("expanded", [])
+            if not expanded_items or _is_pos_marker(base_items):
                 continue
-            if len(items) == 1 and items[0].lower().startswith("или "):
-                alternatives = _extract_note_alternatives(items[0]) or []
-                pending_suffixes = _deduplicate(alternatives)
+
+            if len(base_items) == 1 and base_items[0].lower().startswith("или "):
+                pending_suffixes = expanded_items
                 continue
+
+            items = expanded_items
+            auto_generated = items != base_items
+
             if pending_suffixes:
-                combos = [
-                    _clean_spacing(f"{base} {suffix}")
-                    for base in items
+                suffix_expansions = [
+                    _clean_spacing(f"{item} {suffix}")
+                    for item in items
                     for suffix in pending_suffixes
                 ]
-                items = _deduplicate([*items, *combos])
+                if suffix_expansions:
+                    items = _deduplicate([*items, *suffix_expansions])
+                    auto_generated = True
                 pending_suffixes = []
+
+            cleaned_base = []
+            for base_item in base_items:
+                stripped = base_item.strip()
+                if _is_meaningful_item(stripped):
+                    cleaned_base.append(stripped)
+
             groups.append(
                 TranslationGroup(
                     items=items,
                     label=label if index == 0 else None,
                     requires_review=buffer_requires_review,
+                    base_items=cleaned_base,
+                    auto_generated=auto_generated,
+                    section=section,
                 )
             )
 
@@ -77,8 +134,28 @@ def build_translation_review(parsed_article: Dict) -> TranslationReview:
         buffer_continues = False
         pending_suffixes = []
 
-    for block in parsed_article.get("body", []):
+    for block in blocks or []:
         block_type = block.get("type")
+
+        if block_type == "headword":
+            _flush_buffer()
+            raw_form = block.get("raw_form")
+            child_groups, child_notes = _collect_groups_from_blocks(
+                block.get("children") or [],
+                section=raw_form,
+            )
+            groups.extend(child_groups)
+            notes.extend(child_notes)
+            continue
+
+        if block_type == "illustration" and block.get("eo"):
+            _flush_buffer()
+            example_section = block.get("eo_raw") or block.get("eo")
+            example_groups, example_notes = _build_groups_from_example(block, example_section)
+            groups.extend(example_groups)
+            notes.extend(example_notes)
+            continue
+
         if block_type == "translation" or (block_type == "illustration" and not block.get("eo")):
             block_requires_review = bool(block.get("ru_requires_review"))
             block_continuation = _block_indicates_continuation(block)
@@ -101,35 +178,42 @@ def build_translation_review(parsed_article: Dict) -> TranslationReview:
         if block_type == "note":
             text = _consume_text(block.get("content") or [])
             if text:
-                notes.append(text)
+                _append_note(text)
 
     _flush_buffer()
+    return groups, notes
 
-    return TranslationReview(headword=headword, groups=groups, notes=notes)
 
+def _build_groups_from_example(block: Dict, section: Optional[str]) -> Tuple[List[TranslationGroup], List[str]]:
+    segments = block.get("ru_segments") or []
+    content = _ru_segments_to_content(segments)
+    if not content:
+        return [], []
 
-def format_translation_review(review: TranslationReview) -> str:
-    lines = [review.headword]
-    for group in review.groups:
-        if group.is_empty:
+    label = _extract_label(content)
+    group_specs, extra_notes = _split_translation_groups(content)
+    requires_review = bool(block.get("ru_requires_review"))
+
+    groups: List[TranslationGroup] = []
+    for spec in group_specs:
+        base_items = spec.get("base", [])
+        expanded_items = spec.get("expanded", [])
+        if not expanded_items or _is_pos_marker(base_items):
             continue
-        label_prefix = f"{group.label} " if group.label else ""
-        body = _format_group_items(group.items)
-        suffix = "  [?]" if group.requires_review else ""
-        lines.append(f"  ⮕ {label_prefix}{body}{suffix}")
-    for note in review.notes:
-        lines.append(f"  ℹ {note}")
-    return "\n".join(lines)
+        auto_generated = expanded_items != base_items
+        groups.append(
+            TranslationGroup(
+                items=expanded_items,
+                label=label,
+                requires_review=requires_review,
+                base_items=base_items,
+                auto_generated=auto_generated,
+                section=section,
+            )
+        )
 
-
-def _format_group_items(items: Sequence[str]) -> str:
-    cleaned = [_clean_spacing(item) for item in items if item]
-    cleaned = [item for item in cleaned if item]
-    if not cleaned:
-        return ""
-    if len(cleaned) == 1:
-        return cleaned[0]
-    return "[" + " | ".join(cleaned) + "]"
+    notes = [f"{section}: {note}" if section else note for note in extra_notes]
+    return groups, notes
 
 
 def _extract_label(content: Iterable[Dict]) -> Optional[str]:
@@ -147,18 +231,25 @@ def _extract_label(content: Iterable[Dict]) -> Optional[str]:
 _ALT_SPLIT_RE = re.compile(r"\b(?:или(?:\s+же)?|либо|/)\b", re.IGNORECASE)
 
 
-def _split_translation_groups(content: Iterable[Dict]) -> Tuple[List[List[str]], List[str]]:
+def _split_translation_groups(content: Iterable[Dict]) -> Tuple[List[Dict[str, List[str]]], List[str]]:
     builder = _PhraseBuilder()
-    groups: List[List[str]] = []
-    extra_notes: List[str] = []
     current_group: List[str] = []
+    base_groups: List[List[str]] = []
+    extra_notes: List[str] = []
 
-    def _flush_current() -> None:
-        nonlocal current_group
+    content = _expand_inline_dividers(list(content))
+
+    def _flush_builder() -> None:
         phrases = builder.flush()
         if phrases:
             current_group.extend(phrases)
         extra_notes.extend(builder.take_notes())
+
+    def _finalize_group() -> None:
+        nonlocal current_group
+        if current_group:
+            base_groups.append(_deduplicate(current_group))
+            current_group = []
 
     for node in content:
         node_type = node.get("type")
@@ -167,14 +258,12 @@ def _split_translation_groups(content: Iterable[Dict]) -> Tuple[List[List[str]],
         if node_type == "divider":
             symbol = (node.get("text") or "").strip()
             if symbol == ",":
-                _flush_current()
+                _flush_builder()
             elif symbol == ";":
-                _flush_current()
-                if current_group:
-                    groups.append(_deduplicate(current_group))
-                current_group = []
+                _flush_builder()
+                _finalize_group()
             elif symbol == ".":
-                _flush_current()
+                _flush_builder()
             else:
                 builder.add_text(symbol)
             continue
@@ -190,24 +279,35 @@ def _split_translation_groups(content: Iterable[Dict]) -> Tuple[List[List[str]],
         if text is not None:
             builder.add_text(text)
 
-    _flush_current()
-    if current_group:
-        groups.append(_deduplicate(current_group))
+    _flush_builder()
+    _finalize_group()
 
-    cleaned_groups: List[List[str]] = []
-    for group in groups:
+    results: List[Dict[str, List[str]]] = []
+    for base in base_groups:
+        cleaned_base: List[str] = []
         expanded: List[str] = []
-        for item in group:
-            for variant in _expand_parenthetical_forms(item):
-                normalized = _clean_spacing(variant).rstrip(".,;:")
-                if normalized:
-                    expanded.append(normalized)
-        if expanded:
-            expanded = _deduplicate(expanded)
-            expanded = _expand_cross_product(expanded)
-            cleaned_groups.append(expanded)
+        for item in base:
+            raw_clean = item.strip()
+            if _is_meaningful_item(raw_clean):
+                cleaned_base.append(raw_clean)
+            expanded.extend(
+                variant
+                for variant in _expand_parenthetical_forms(item)
+                if variant
+            )
+        expanded = _deduplicate([_strip_trailing_punctuation(x) for x in expanded])
+        expanded = [item for item in expanded if _is_meaningful_item(item)]
+        expanded = _expand_cross_product(expanded)
+        expanded = _expand_suffix_appending(expanded)
+        expanded = _deduplicate(expanded)
+        results.append(
+            {
+                "base": cleaned_base,
+                "expanded": expanded or base,
+            }
+        )
 
-    return cleaned_groups, extra_notes
+    return results, extra_notes
 
 
 class _PhraseBuilder:
@@ -424,6 +524,46 @@ def _block_indicates_continuation(block: Dict) -> bool:
     return False
 
 
+def _strip_accents(text: str) -> str:
+    return text.translate({ord("`"): None, ord("´"): None, ord("'" ): None})
+
+
+def _first_token(text: str) -> str:
+    return text.strip().split()[0]
+
+
+def _looks_like_verb(text: str) -> bool:
+    stripped = _strip_accents(text).lower()
+    endings = ("ться", "сть", "сти", "чь", "ть", "ти")
+    return any(stripped.endswith(ending) for ending in endings)
+
+
+def _looks_like_adjective(text: str) -> bool:
+    stripped = _strip_accents(text).lower()
+    endings = (
+        "ая",
+        "яя",
+        "ий",
+        "ый",
+        "ой",
+        "ое",
+        "ее",
+        "ые",
+        "ие",
+        "ний",
+        "ный",
+        "ской",
+        "ский",
+        "льный",
+        "тельный",
+        "чный",
+        "ческий",
+        "оватый",
+        "истый",
+    )
+    return any(stripped.endswith(ending) for ending in endings)
+
+
 def _expand_cross_product(items: List[str]) -> List[str]:
     multi = [item for item in items if " " in item]
     singles = [item for item in items if " " not in item]
@@ -443,14 +583,182 @@ def _expand_cross_product(items: List[str]) -> List[str]:
         return items
 
     suffix, prefixes = next(iter(suffix_to_prefixes.items()))
-    suffix_options = [suffix] + singles
 
-    combinations: List[str] = []
-    for prefix in sorted(prefixes):
-        for option in suffix_options:
-            combinations.append(_clean_spacing(f"{prefix} {option}"))
+    adjective_candidates = [
+        item for item in items if " " not in item and _looks_like_adjective(item)
+    ]
+    if len(prefixes) >= 2 and adjective_candidates:
+        suffix_options = [suffix] + adjective_candidates
+        combinations: List[str] = []
+        for prefix in sorted(prefixes):
+            for option in suffix_options:
+                combinations.append(_clean_spacing(f"{prefix} {option}"))
+        return _deduplicate(combinations)
 
-    return _deduplicate(combinations)
+    if adjective_candidates:
+        combos = [
+            _clean_spacing(f"{adj} {suffix}") for adj in adjective_candidates
+        ]
+        return _deduplicate([*items, *combos])
+
+    return items
+
+
+def _expand_suffix_appending(items: List[str]) -> List[str]:
+    singles = [
+        item for item in items if " " not in item and not item.strip().startswith("~")
+    ]
+    multi_candidates = [
+        item for item in items if " " in item and not item.strip().startswith("~")
+    ]
+    extra_items: List[str] = []
+
+    for candidate in multi_candidates:
+        tokens = candidate.split()
+        if len(tokens) < 2:
+            continue
+        for suffix_len in range(1, min(3, len(tokens))):
+            prefix_tokens = tokens[:-suffix_len]
+            suffix_tokens = tokens[-suffix_len:]
+            if len(prefix_tokens) != 1:
+                continue
+            base_word = prefix_tokens[0]
+            suffix_text = " ".join(suffix_tokens)
+
+            if _looks_like_verb(base_word):
+                verb_candidates = [
+                    item
+                    for item in singles
+                    if _looks_like_verb(_first_token(item))
+                ]
+                if len(verb_candidates) >= 2:
+                    for verb in verb_candidates:
+                        extra_items.append(_clean_spacing(f"{verb} {suffix_text}"))
+            elif _looks_like_adjective(base_word):
+                adjective_candidates = [
+                    item
+                    for item in singles
+                    if _looks_like_adjective(_first_token(item))
+                ]
+                if adjective_candidates:
+                    last_token = suffix_tokens[-1]
+                    if len(adjective_candidates) >= 1:
+                        for adjective in adjective_candidates:
+                            extra_items.append(
+                                _clean_spacing(f"{adjective} {suffix_text}")
+                            )
+            else:
+                continue
+
+    if not extra_items:
+        return items
+
+    combined = _deduplicate([*items, *extra_items])
+    singles_set = {item for item in items if " " not in item}
+    if any(" " in item for item in extra_items):
+        combined = [
+            item for item in combined if (" " in item) or (item not in singles_set)
+        ]
+    return combined
+
+
+def _ru_segments_to_content(segments: Iterable[Dict]) -> List[Dict]:
+    content: List[Dict] = []
+    for seg in segments:
+        kind = seg.get("kind")
+        text = seg.get("text")
+        if not text:
+            continue
+        if kind == "label":
+            content.append({"type": "label", "text": text})
+        elif kind == "term":
+            content.append({"type": "text", "style": "regular", "text": text})
+        elif kind in {"near_divider", "far_divider", "sentence_divider", "phrase_divider"}:
+            content.append({"type": "divider", "text": text, "kind": kind})
+        elif kind == "note":
+            content.append(
+                {
+                    "type": "note",
+                    "content": [{"type": "text", "style": "regular", "text": text}],
+                }
+            )
+        elif kind in {"reference", "link"}:
+            content.append({"type": "text", "style": "regular", "text": text})
+        else:
+            content.append({"type": "text", "style": "regular", "text": text})
+    return content
+
+
+def _strip_accents(text: str) -> str:
+    translations = {ord("`"): None, ord("´"): None, ord("'"): None}
+    return text.translate(translations)
+
+
+def _first_token(text: str) -> str:
+    return text.strip().split()[0]
+
+
+def _looks_like_verb(text: str) -> bool:
+    stripped = _strip_accents(text).lower()
+    endings = ("ться", "сь", "ст", "ть", "ти", "чь")
+    return any(stripped.endswith(ending) for ending in endings)
+
+
+def _strip_trailing_punctuation(value: str) -> str:
+    return value.rstrip(" ,.;:)")
+
+
+def _is_meaningful_item(value: str) -> bool:
+    if not value:
+        return False
+    stripped = value.strip()
+    return stripped not in {",", ";", ".", ")", "("}
+
+
+def _expand_inline_dividers(nodes: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    result: List[Dict[str, Any]] = []
+    for node in nodes:
+        if node.get("type") == "text":
+            raw_text = node.get("text") or ""
+            if ";" in raw_text:
+                parts = raw_text.split(";")
+                for idx, part in enumerate(parts):
+                    trimmed = part.strip()
+                    if trimmed:
+                        new_node = dict(node)
+                        new_node["text"] = trimmed
+                        result.append(new_node)
+                    if idx != len(parts) - 1:
+                        result.append({"type": "divider", "text": ";", "kind": "far_divider"})
+                continue
+        result.append(node)
+    return result
+
+
+def _looks_like_adjective(text: str) -> bool:
+    stripped = _strip_accents(text).lower()
+    endings = (
+        "ая",
+        "яя",
+        "ий",
+        "ый",
+        "ой",
+        "ое",
+        "ее",
+        "ые",
+        "ие",
+        "ний",
+        "ный",
+        "ской",
+        "ский",
+        "льный",
+        "тельный",
+        "чный",
+        "ческий",
+        "оватый",
+        "истый",
+    )
+    return any(stripped.endswith(ending) for ending in endings)
 
 
 def _consume_text(content: Iterable[Dict]) -> str:

@@ -3,7 +3,19 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import DateTime, Enum, ForeignKey, Index, Integer, String, Text, func, UniqueConstraint, JSON
+from sqlalchemy import (
+    JSON,
+    Boolean,
+    DateTime,
+    Enum,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+    func,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -176,9 +188,28 @@ class ArticleParseState(Base):
     first_example_eo: Mapped[Optional[str]] = mapped_column(Text)
     first_example_ru: Mapped[Optional[str]] = mapped_column(Text)
     parsed_payload: Mapped[Optional[dict]] = mapped_column(JSON)
+    resolved_translations: Mapped[Optional[dict]] = mapped_column(JSON)
+    has_notes: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     parsed_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=False),
         nullable=False,
         server_default=func.now(),
         onupdate=func.now(),
+    )
+
+
+class ArticleParseNote(Base):
+    __tablename__ = "article_parse_notes"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    lang: Mapped[str] = mapped_column(String(4), nullable=False)
+    art_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    author: Mapped[Optional[str]] = mapped_column(String(128))
+    body: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=False), nullable=False, server_default=func.now()
+    )
+
+    __table_args__ = (
+        Index("ix_article_parse_notes_lang_art", "lang", "art_id"),
     )
