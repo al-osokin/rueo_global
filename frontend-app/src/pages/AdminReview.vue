@@ -151,13 +151,39 @@
                   label="Принять"
                 />
               </div>
-                <div class="text-body2 q-ml-sm">
-                  <div>
-                    <span class="text-grey-7">Варианты:</span>
-                    {{ group.items.join(', ') }}
-                  </div>
+              <div class="text-body2 q-ml-sm">
+                <div>
+                  <span class="text-grey-7">Текущий вариант:</span>
+                  {{ formatItems(group.items) }}
+                </div>
                 <div v-if="group.base_items.length" class="text-caption text-grey-7">
-                  Базовые: {{ group.base_items.join(', ') }}
+                  Источник: {{ formatItems(group.base_items) }}
+                </div>
+                <div v-if="group.candidates.length > 1" class="q-mt-sm">
+                  <div class="text-caption text-grey-7 q-mb-xs">
+                    Выберите гипотезу:
+                  </div>
+                  <div class="column q-gutter-xs">
+                    <div
+                      v-for="candidate in group.candidates"
+                      :key="candidate.id || candidate.title"
+                      class="row no-wrap items-start"
+                    >
+                      <q-radio
+                        :model-value="group.selected_candidate"
+                        :name="group.group_id"
+                        :val="candidate.id"
+                        dense
+                        @update:model-value="(val) => onCandidateChange(group, val)"
+                      />
+                      <div class="q-ml-sm">
+                        <div class="text-body2">{{ candidate.title }}</div>
+                        <div class="text-caption text-grey-7">
+                          {{ formatItems(candidate.items) }}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
@@ -233,6 +259,48 @@ const formatDate = (value) => {
   return new Date(value).toLocaleString();
 };
 
+const normalizeItemsKey = (items) => {
+  if (!Array.isArray(items)) {
+    return "";
+  }
+  return items.join("|||");
+};
+
+const formatItems = (items) => {
+  if (!Array.isArray(items) || !items.length) {
+    return "—";
+  }
+  return items.join(" | ");
+};
+
+const applyCandidateSelection = (group, candidateId = null) => {
+  const candidates = Array.isArray(group.candidates) ? group.candidates : [];
+  if (!candidates.length) {
+    group.selected_candidate = null;
+    group.items = Array.isArray(group.items) ? [...group.items] : [];
+  } else {
+    let chosen = candidates.find((candidate) => candidate.id === candidateId);
+    if (!chosen) {
+      [chosen] = candidates;
+    }
+    group.selected_candidate = chosen?.id ?? null;
+    group.items = Array.isArray(chosen?.items) ? [...chosen.items] : [];
+  }
+  const baseKey = normalizeItemsKey(group.base_items);
+  const itemsKey = normalizeItemsKey(group.items);
+  if (baseKey) {
+    group.auto_generated = baseKey !== itemsKey;
+  }
+};
+
+const onCandidateChange = (group, candidateId) => {
+  if (!group) return;
+  if (candidateId === group.selected_candidate) {
+    return;
+  }
+  applyCandidateSelection(group, candidateId);
+};
+
 const clearArticle = () => {
   article.value = null;
   groups.splice(0, groups.length);
@@ -293,16 +361,28 @@ const onFilter = (val, update, abort) => {
 const prepareGroups = (payload) => {
   groups.splice(0, groups.length);
   (payload.groups || []).forEach((group) => {
-    groups.push({
+    const candidateList = Array.isArray(group.candidates)
+      ? group.candidates.map((candidate) => ({
+          id: candidate.id,
+          title: candidate.title,
+          items: Array.isArray(candidate.items) ? [...candidate.items] : [],
+        }))
+      : [];
+    const baseItems = Array.isArray(group.base_items) ? [...group.base_items] : [];
+    const localGroup = {
       group_id: group.group_id,
       label: group.label,
-      items: group.items || [],
-      base_items: group.base_items || [],
+      items: Array.isArray(group.items) ? [...group.items] : [],
+      base_items: baseItems,
       requires_review: group.requires_review,
       auto_generated: group.auto_generated,
       section: group.section || null,
       accepted: group.accepted,
-    });
+      candidates: candidateList,
+      selected_candidate: group.selected_candidate || (candidateList[0]?.id ?? null),
+    };
+    applyCandidateSelection(localGroup, localGroup.selected_candidate);
+    groups.push(localGroup);
   });
 };
 
@@ -348,9 +428,13 @@ const buildResolvedPayload = () => {
     groups: {},
   };
   groups.forEach((group) => {
-    result.groups[group.group_id] = {
+    const entry = {
       accepted: !!group.accepted,
     };
+    if (group.selected_candidate) {
+      entry.selected_candidate = group.selected_candidate;
+    }
+    result.groups[group.group_id] = entry;
   });
   return result;
 };

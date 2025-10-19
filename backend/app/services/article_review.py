@@ -7,7 +7,10 @@ from sqlalchemy.orm import Session
 
 from app.models import Article, ArticleParseNote, ArticleParseState, ArticleRu
 from app.services.article_parser import ArticleParserService
-from app.services.translation_review import build_translation_review
+from app.services.translation_review import (
+    apply_candidate_selection,
+    build_translation_review,
+)
 
 
 class ArticleReviewService:
@@ -112,21 +115,18 @@ class ArticleReviewService:
         review_data = build_translation_review(result.raw) if result.raw else None
 
         resolved = state.resolved_translations or {}
-        resolved_groups = (
-            resolved.get("groups") if isinstance(resolved, dict) else {}
-        )
+        resolved_groups = resolved.get("groups") if isinstance(resolved, dict) else {}
+        if not isinstance(resolved_groups, dict):
+            resolved_groups = {}
 
         groups_payload: List[Dict[str, Any]] = []
         review_notes: List[str] = []
         if review_data:
+            apply_candidate_selection(review_data, resolved_groups)
             review_notes = review_data.notes
             for index, group in enumerate(review_data.groups):
                 group_id = f"group_{index}"
-                stored = (
-                    resolved_groups.get(group_id)
-                    if isinstance(resolved_groups, dict)
-                    else None
-                )
+                stored = resolved_groups.get(group_id)
                 accepted = None
                 if isinstance(stored, dict):
                     accepted = stored.get("accepted")
@@ -135,13 +135,22 @@ class ArticleReviewService:
                 groups_payload.append(
                     {
                         "group_id": group_id,
-                        "items": group.items,
-                        "base_items": group.base_items,
+                        "items": list(group.items),
+                        "base_items": list(group.base_items),
                         "label": group.label,
                         "requires_review": group.requires_review,
                         "auto_generated": group.auto_generated,
                         "section": group.section,
                         "accepted": bool(accepted),
+                        "candidates": [
+                            {
+                                "id": candidate.candidate_id,
+                                "title": candidate.title,
+                                "items": list(candidate.items),
+                            }
+                            for candidate in group.candidates
+                        ],
+                        "selected_candidate": group.selected_candidate,
                     }
                 )
 

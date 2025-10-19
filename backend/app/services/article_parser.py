@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from app.models import Article, ArticleParseState, ArticleRu
 from app.parsing import get_parsing_pipeline
 from app.services.translation_review import (
+    apply_candidate_selection,
     build_translation_review,
     collect_translation_phrases,
 )
@@ -241,10 +242,32 @@ class ArticleParserService:
         success = bool(headword)
         examples = self._extract_examples(parsed)
         review = build_translation_review(parsed)
+
+        resolved = self.session.execute(
+            select(ArticleParseState.resolved_translations)
+            .where(ArticleParseState.lang == lang, ArticleParseState.art_id == art_id)
+        ).scalar_one_or_none()
+        resolved_groups = {}
+        if isinstance(resolved, dict):
+            resolved_groups = resolved.get("groups") or {}
+
+        apply_candidate_selection(review, resolved_groups)
         translations = collect_translation_phrases(review)
-        needs_review = any(
-            group.requires_review or group.auto_generated for group in review.groups
-        )
+
+        needs_review = False
+        for index, group in enumerate(review.groups):
+            group_id = f"group_{index}"
+            stored = resolved_groups.get(group_id)
+            accepted = None
+            if isinstance(stored, dict):
+                accepted = stored.get("accepted")
+
+            if accepted is True:
+                continue
+
+            if group.requires_review or (group.auto_generated and accepted is not True):
+                needs_review = True
+                break
 
         return ArticleParseResult(
             art_id=art_id,

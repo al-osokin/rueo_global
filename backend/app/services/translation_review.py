@@ -4,7 +4,14 @@ import re
 from collections import defaultdict
 from collections import defaultdict
 from dataclasses import dataclass, field
-from typing import Dict, Iterable, List, Optional, Sequence, Tuple
+from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
+
+
+@dataclass(slots=True)
+class TranslationCandidate:
+    candidate_id: str
+    title: str
+    items: List[str]
 
 
 @dataclass(slots=True)
@@ -17,10 +24,20 @@ class TranslationGroup:
     base_items: List[str] = field(default_factory=list)
     auto_generated: bool = False
     section: Optional[str] = None
+    candidates: List[TranslationCandidate] = field(default_factory=list)
+    selected_candidate: Optional[str] = None
 
     @property
     def is_empty(self) -> bool:
         return not self.items
+
+    def find_candidate(self, candidate_id: Optional[str]) -> Optional[TranslationCandidate]:
+        if not candidate_id:
+            return None
+        for candidate in self.candidates:
+            if candidate.candidate_id == candidate_id:
+                return candidate
+        return None
 
 
 @dataclass(slots=True)
@@ -49,6 +66,93 @@ def format_translation_review(review: TranslationReview) -> str:
     for note in review.notes:
         lines.append(f"  ℹ {note}")
     return "\n".join(lines)
+
+
+def _build_translation_candidates(
+    base_items: Sequence[str],
+    expanded_items: Sequence[str],
+) -> List[TranslationCandidate]:
+    cleaned_base = [item for item in base_items if item]
+    cleaned_expanded = [item for item in expanded_items if item]
+
+    candidates: List[TranslationCandidate] = []
+
+    if cleaned_expanded:
+        if cleaned_expanded == cleaned_base:
+            candidates.append(
+                TranslationCandidate(
+                    candidate_id="base",
+                    title="Как в источнике",
+                    items=list(cleaned_expanded),
+                )
+            )
+        else:
+            candidates.append(
+                TranslationCandidate(
+                    candidate_id="expanded",
+                    title="Расширенные комбинации",
+                    items=list(cleaned_expanded),
+                )
+            )
+
+    if cleaned_base and cleaned_base != cleaned_expanded:
+        candidates.append(
+            TranslationCandidate(
+                candidate_id="base",
+                title="Как в источнике",
+                items=list(cleaned_base),
+            )
+        )
+
+    if not candidates and cleaned_base:
+        candidates.append(
+            TranslationCandidate(
+                candidate_id="base",
+                title="Как в источнике",
+                items=list(cleaned_base),
+            )
+        )
+
+    if not candidates and cleaned_expanded:
+        candidates.append(
+            TranslationCandidate(
+                candidate_id="expanded",
+                title="Расширенные комбинации",
+                items=list(cleaned_expanded),
+            )
+        )
+
+    return candidates
+
+
+def _select_candidate(group: TranslationGroup, candidate_id: Optional[str]) -> None:
+    candidate = group.find_candidate(candidate_id)
+    if candidate is None and group.candidates:
+        candidate = group.candidates[0]
+
+    if candidate:
+        group.items = list(candidate.items)
+        group.selected_candidate = candidate.candidate_id
+    else:
+        group.items = list(group.items)
+        group.selected_candidate = None
+
+    if group.base_items:
+        group.auto_generated = bool(group.items != group.base_items)
+
+
+def apply_candidate_selection(
+    review: TranslationReview,
+    resolved_groups: Optional[Dict[str, Any]],
+) -> None:
+    resolved_map = resolved_groups or {}
+    for index, group in enumerate(review.groups):
+        group_id = f"group_{index}"
+        stored = resolved_map.get(group_id)
+        candidate_id = None
+        if isinstance(stored, dict):
+            candidate_id = stored.get("selected_candidate")
+        _select_candidate(group, candidate_id)
 
 
 def _format_group_items(items: Sequence[str]) -> str:
@@ -118,16 +222,18 @@ def _collect_groups_from_blocks(blocks: Iterable[Dict], section: Optional[str]) 
                 if _is_meaningful_item(stripped):
                     cleaned_base.append(stripped)
 
-            groups.append(
-                TranslationGroup(
-                    items=items,
-                    label=label if index == 0 else None,
-                    requires_review=buffer_requires_review,
-                    base_items=cleaned_base,
-                    auto_generated=auto_generated,
-                    section=section,
-                )
+            candidates = _build_translation_candidates(cleaned_base, items)
+            group = TranslationGroup(
+                items=list(items),
+                label=label if index == 0 else None,
+                requires_review=buffer_requires_review,
+                base_items=cleaned_base,
+                auto_generated=auto_generated,
+                section=section,
+                candidates=candidates,
             )
+            _select_candidate(group, None)
+            groups.append(group)
 
         buffer_content = []
         buffer_requires_review = False
@@ -201,16 +307,18 @@ def _build_groups_from_example(block: Dict, section: Optional[str]) -> Tuple[Lis
         if not expanded_items or _is_pos_marker(base_items):
             continue
         auto_generated = expanded_items != base_items
-        groups.append(
-            TranslationGroup(
-                items=expanded_items,
-                label=label,
-                requires_review=requires_review,
-                base_items=base_items,
-                auto_generated=auto_generated,
-                section=section,
-            )
+        candidates = _build_translation_candidates(base_items, expanded_items)
+        group = TranslationGroup(
+            items=list(expanded_items),
+            label=label,
+            requires_review=requires_review,
+            base_items=base_items,
+            auto_generated=auto_generated,
+            section=section,
+            candidates=candidates,
         )
+        _select_candidate(group, None)
+        groups.append(group)
 
     notes = [f"{section}: {note}" if section else note for note in extra_notes]
     return groups, notes
