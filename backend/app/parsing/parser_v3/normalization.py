@@ -361,6 +361,12 @@ def _normalize_translation(block: Dict[str, Any]) -> Dict[str, Any]:
         for item in normalized_content:
             if item.get("type") == "text" and item.get("style") == "regular":
                 continue
+            if (
+                item.get("type") == "text"
+                and item.get("style") == "italic"
+                and _should_include_italic_segment(item.get("text", "").strip())
+            ):
+                continue
             prefix.append(item)
         segment_nodes, variant_terms = _convert_ru_segments_to_content(ru_segments)
         new_block["content"] = prefix + segment_nodes
@@ -406,12 +412,20 @@ def _build_ru_segments_from_translation(content: List[Dict[str, Any]]) -> Option
     for item in content:
         if item.get("type") != "text":
             continue
-        if item.get("style") != "regular":
+        style = item.get("style", "regular")
+        raw_text = item.get("text", "")
+        if not raw_text:
             continue
-        text = item.get("text", "").strip()
-        if not text or text in {"(", ")"}:
+        text = raw_text.strip()
+        if not text:
             continue
-        text_chunks.append(text)
+        if style == "regular":
+            if text in {"(", ")"}:
+                continue
+            text_chunks.append(text)
+        elif style == "italic":
+            if _should_include_italic_segment(text):
+                text_chunks.append(text)
     if not text_chunks:
         return None
 
@@ -422,6 +436,19 @@ def _build_ru_segments_from_translation(content: List[Dict[str, Any]]) -> Option
     parts = legacy_parser.parse_rich_text(combined_text, preserve_punctuation=False)
     segments = legacy_parser.split_ru_segments(parts)
     return segments or None
+
+
+_ITALIC_NOTE_PATTERN = re.compile(r"\b(?:или(?:\s+же)?|либо)\b", re.IGNORECASE)
+
+
+def _should_include_italic_segment(text: str) -> bool:
+    if not text:
+        return False
+    if text.startswith("(") or text.endswith(")"):
+        return True
+    if _ITALIC_NOTE_PATTERN.search(text):
+        return True
+    return False
 
 
 def _convert_ru_segments_to_content(segments: List[Dict[str, Any]]) -> Tuple[List[Dict[str, Any]], List[str]]:

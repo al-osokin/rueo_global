@@ -554,15 +554,23 @@ def _expand_parenthetical_forms(phrase: str) -> List[str]:
                 prefix = before_trim[: match.start()].rstrip()
                 base_word = match.group(1)
                 rest = after
+                rest_lstrip = rest.lstrip()
+                needs_space = (
+                    bool(rest)
+                    and rest[0].isspace()
+                    and rest_lstrip
+                )
                 variants: List[str] = []
                 for replacement in [base_word] + alternatives:
                     prefix_part = prefix
                     if prefix_part and not prefix_part.endswith((" ", "-", "—", "/")):
                         prefix_part += " "
                     new_text = prefix_part + replacement
+                    if needs_space and not new_text.endswith((" ", "-", "—", "/")):
+                        new_text += " "
                     if rest and not rest.startswith((" ", ",", ".", ";", ":", ")")):
                         new_text += " "
-                    new_text += rest.lstrip()
+                    new_text += rest_lstrip
                     variants.extend(_recurse(new_text))
                 return variants
 
