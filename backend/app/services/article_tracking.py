@@ -29,11 +29,21 @@ def extract_canonical_key(text: str) -> str:
 
 def calculate_checksum_from_text(text: str) -> str:
     hasher = hashlib.sha256()
-    for line in text.splitlines():
+    lines = text.splitlines()
+    if not lines and text:
+        lines = [text]
+    for line in lines:
         normalized = line.replace("\t", " ")
         normalized = re.sub(r"\s+", " ", normalized.strip())
-        if normalized:
-            hasher.update(normalized.encode("utf-8"))
+        if not normalized:
+            continue
+        try:
+            payload = normalized.encode("cp1251")
+        except UnicodeEncodeError:
+            raise ValueError(
+                "Encountered characters outside cp1251 during checksum calculation"
+            ) from None
+        hasher.update(payload)
     return hasher.hexdigest()
 
 
@@ -174,14 +184,13 @@ class ArticleTracker:
                     if header_lines:
                         header_lines[-1] = new_header_line
             else:
-                # отсутствует корректный заголовок — создаём фиксированный
-                new_header_line = f"{self.fake_header_prefix} {FIXED_INITIALS}"
                 if header_lines:
-                    header_lines[-1] = new_header_line
+                    new_header_line = header_lines[-1]
                 else:
+                    new_header_line = f"{self.fake_header_prefix} {FIXED_INITIALS}"
                     header_lines.append(new_header_line)
-                header_changed = True
-                self.summary["articles_auto_dated"] += 1
+                    header_changed = True
+                    self.summary["articles_auto_dated"] += 1
 
             change = ArticleChangeLog(
                 file_state_id=file_state.id,

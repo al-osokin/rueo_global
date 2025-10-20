@@ -9,7 +9,7 @@ from typing import Any, Dict, Iterable, Optional
 from sqlalchemy import delete, select
 
 from app.database import SessionLocal, init_db
-from app.models import ArticleFileState, ArticleState
+from app.models import ArticleChangeLog, ArticleFileState, ArticleState
 from app.services.article_tracking import extract_canonical_key
 
 
@@ -38,6 +38,10 @@ def import_states(state_dir: Path, lang: str, reset: bool = False) -> None:
 
     with SessionLocal() as session:
         if reset:
+            state_ids = select(ArticleFileState.id).where(ArticleFileState.lang == lang)
+            session.execute(
+                delete(ArticleChangeLog).where(ArticleChangeLog.file_state_id.in_(state_ids))
+            )
             session.execute(
                 delete(ArticleState).where(
                     ArticleState.file_state_id.in_(
