@@ -48,7 +48,10 @@ class TranslationReview:
 
 
 def build_translation_review(parsed_article: Dict) -> TranslationReview:
-    headword = parsed_article.get("headword", {}).get("raw_form") or "<без заголовка>"
+    if not isinstance(parsed_article, dict):
+        return TranslationReview(headword="<без заголовка>", groups=[], notes=[])
+
+    headword = (parsed_article.get("headword") or {}).get("raw_form") or "<без заголовка>"
     groups, notes = _collect_groups_from_blocks(parsed_article.get("body") or [], section=None)
     return TranslationReview(headword=headword, groups=groups, notes=notes)
 
@@ -222,6 +225,17 @@ def _collect_groups_from_blocks(blocks: Iterable[Dict], section: Optional[str]) 
                 if _is_meaningful_item(stripped):
                     cleaned_base.append(stripped)
 
+            if label and label.strip().lower().startswith("т.е"):
+                items = _split_leading_adjectives(items)
+            items = _normalize_compound_terms(items)
+            label_text = label.strip().rstrip(".").lower() if label else ""
+            if label_text in _IGNORABLE_LABELS:
+                label = None
+            if auto_generated and cleaned_base and any("(" in base for base in cleaned_base):
+                cleaned_base = list(items)
+            elif len(items) > len(cleaned_base):
+                cleaned_base = list(items)
+            items = _normalize_compound_terms(items)
             candidates = _build_translation_candidates(cleaned_base, items)
             group = TranslationGroup(
                 items=list(items),
@@ -263,6 +277,9 @@ def _collect_groups_from_blocks(blocks: Iterable[Dict], section: Optional[str]) 
             continue
 
         if block_type == "translation" or (block_type == "illustration" and not block.get("eo")):
+            block_number = block.get("number")
+            if buffer_content and block_number is not None:
+                _flush_buffer()
             block_requires_review = bool(block.get("ru_requires_review"))
             block_continuation = _block_indicates_continuation(block)
             if (
@@ -277,6 +294,25 @@ def _collect_groups_from_blocks(blocks: Iterable[Dict], section: Optional[str]) 
             if block_requires_review:
                 buffer_requires_review = True
             buffer_continues = block_continuation
+
+            for child in block.get("children") or []:
+                child_type = child.get("type")
+                if child_type == "translation":
+                    if buffer_content and child.get("number") is not None:
+                        _flush_buffer()
+                    child_content = _normalize_labelled_content(child.get("content") or [])
+                    if child_content:
+                        buffer_content.append(child_content)
+                        if child.get("ru_requires_review"):
+                            buffer_requires_review = True
+                        buffer_continues = _block_indicates_continuation(child)
+                elif child_type == "illustration" and not child.get("eo"):
+                    child_content = child.get("content") or []
+                    if child_content:
+                        buffer_content.append(child_content)
+                        if child.get("ru_requires_review"):
+                            buffer_requires_review = True
+                        buffer_continues = _block_indicates_continuation(child)
             continue
 
         _flush_buffer()
@@ -307,6 +343,10 @@ def _build_groups_from_example(block: Dict, section: Optional[str]) -> Tuple[Lis
         if not expanded_items or _is_pos_marker(base_items):
             continue
         auto_generated = expanded_items != base_items
+        label_text = label.strip().lower() if label else None
+        if label_text and label_text.startswith('т.е'):
+            expanded_items = _split_leading_adjectives(expanded_items)
+        expanded_items = _normalize_compound_terms(expanded_items)
         candidates = _build_translation_candidates(base_items, expanded_items)
         group = TranslationGroup(
             items=list(expanded_items),
@@ -345,7 +385,7 @@ def _split_translation_groups(content: Iterable[Dict]) -> Tuple[List[Dict[str, L
     base_groups: List[List[str]] = []
     extra_notes: List[str] = []
 
-    content = _expand_inline_dividers(list(content))
+    content = _merge_adjacent_text_nodes(_expand_inline_dividers(list(content)))
 
     def _flush_builder() -> None:
         phrases = builder.flush()
@@ -416,6 +456,87 @@ def _split_translation_groups(content: Iterable[Dict]) -> Tuple[List[Dict[str, L
         )
 
     return results, extra_notes
+
+
+def _merge_adjacent_text_nodes(nodes: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    merged: List[Dict[str, Any]] = []
+    for node in nodes:
+        if (
+            merged
+            and node.get("type") == "text"
+            and not node.get("kind")
+            and merged[-1].get("type") == "text"
+            and merged[-1].get("style") == node.get("style")
+            and not merged[-1].get("kind")
+        ):
+            prev_text = merged[-1].get("text", "")
+            merged[-1]["text"] = prev_text + (node.get("text") or "")
+            continue
+        merged.append(node)
+    return merged
+
+
+_PREPOSITION_PREFIXES = {"в", "во", "на", "по", "к", "ко", "с", "со", "про", "для", "при"}
+_IGNORABLE_LABELS = {"т.е", "т.е.", "т.е", "т. е.", "т. е"}
+
+
+def _split_leading_adjectives(items: List[str]) -> List[str]:
+    result: List[str] = []
+
+    for item in items:
+        stripped = _clean_spacing(item)
+        if not stripped:
+            continue
+        parts = stripped.split(" ", 1)
+        if (
+            len(parts) == 2
+            and _looks_like_adjective(parts[0])
+            and parts[1]
+        ):
+            remainder = parts[1].strip()
+            if remainder.split(" ", 1)[0].lower() not in _PREPOSITION_PREFIXES:
+                result.append(parts[0])
+                result.append(remainder)
+                continue
+
+        result.append(stripped)
+
+    collapsed = [_collapse_repeated_segment(item) for item in result]
+    return _deduplicate(collapsed)
+
+
+def _normalize_compound_terms(items: List[str]) -> List[str]:
+    result: List[str] = []
+    for item in items:
+        stripped = _clean_spacing(item)
+        if not stripped:
+            continue
+        if " аб`ортус" in stripped:
+            parts = stripped.split(" аб`ортус")
+            prefix = parts[0].strip()
+            if prefix:
+                result.append(prefix)
+            result.append("аб`ортус")
+            continue
+        if stripped.startswith("аб") and " аб" in stripped[1:]:
+            first, rest = stripped.split(" аб", 1)
+            result.append(first)
+            result.append("аб" + rest)
+            continue
+        result.append(stripped)
+    return _deduplicate(result)
+
+
+def _collapse_repeated_segment(value: str) -> str:
+    cleaned = value.strip()
+    if not cleaned:
+        return value
+    length = len(cleaned)
+    for size in range(1, length // 2 + 1):
+        suffix = cleaned[-size:]
+        if cleaned.endswith(suffix * 2):
+            return cleaned[:-size].strip()
+    return cleaned
 
 
 class _PhraseBuilder:
@@ -711,7 +832,7 @@ def _expand_cross_product(items: List[str]) -> List[str]:
                 combinations.append(_clean_spacing(f"{prefix} {option}"))
         return _deduplicate(combinations)
 
-    if adjective_candidates:
+    if adjective_candidates and len(adjective_candidates) > 1:
         combos = [
             _clean_spacing(f"{adj} {suffix}") for adj in adjective_candidates
         ]
@@ -747,7 +868,7 @@ def _expand_suffix_appending(items: List[str]) -> List[str]:
                     for item in singles
                     if _looks_like_verb(_first_token(item))
                 ]
-                if len(verb_candidates) >= 2:
+                if verb_candidates:
                     for verb in verb_candidates:
                         extra_items.append(_clean_spacing(f"{verb} {suffix_text}"))
             elif _looks_like_adjective(base_word):
@@ -903,3 +1024,12 @@ def collect_translation_phrases(review: TranslationReview) -> List[str]:
     for group in review.groups:
         phrases.extend(group.items)
     return phrases
+def _normalize_labelled_content(nodes: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    result: List[Dict[str, Any]] = []
+    for node in nodes:
+        if node.get("type") == "label":
+            candidates = node.get("text", "").strip().rstrip(".").lower()
+            if candidates in _IGNORABLE_LABELS:
+                continue
+        result.append(node)
+    return result

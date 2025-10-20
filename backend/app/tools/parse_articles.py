@@ -54,7 +54,8 @@ def main() -> None:
     init_db()
     summary = {"status": {"success": 0, "failed": 0}, "templates": {}}
     samples: List = []
-    payload: List[dict] = []
+    successes: List[dict] = []
+    failures: List[dict] = []
 
     with SessionLocal() as session:
         service = ArticleParserService(session)
@@ -64,11 +65,11 @@ def main() -> None:
             offset=args.offset,
             include_raw=args.include_raw,
         )
-        for index, result in enumerate(iterator, start=1):
-            if result.success:
-                summary["status"]["success"] += 1
-            else:
-                summary["status"]["failed"] += 1
+    for index, result in enumerate(iterator, start=1):
+        if result.success:
+            summary["status"]["success"] += 1
+        else:
+            summary["status"]["failed"] += 1
 
             template = result.template or "<unknown>"
             summary["templates"][template] = summary["templates"].get(template, 0) + 1
@@ -77,12 +78,14 @@ def main() -> None:
                 samples.append(result)
 
             if args.output:
-                payload.append(result.to_dict())
+                successes.append(result.to_dict())
 
-            if args.save_state:
-                service.store_result(result, replace_payload=args.include_raw)
-                if args.batch_size and index % args.batch_size == 0:
-                    session.flush()
+        if args.save_state:
+            service.store_result(result, replace_payload=args.include_raw)
+            if args.batch_size and index % args.batch_size == 0:
+                session.flush()
+        if not result.success and args.output:
+            failures.append(result.to_dict())
 
         if args.save_state:
             session.commit()
@@ -114,8 +117,13 @@ def main() -> None:
             )
             print(f"    примеры: {example_text}")
 
-    if args.output and payload:
-        _export_results(args.output, payload)
+    if args.output:
+        output_payload = {
+            "status": summary["status"],
+            "successes": successes,
+            "failures": failures,
+        }
+        _export_results(args.output, output_payload)
         print(f"\nSaved detailed results to {args.output}")
 
     if args.save_state:

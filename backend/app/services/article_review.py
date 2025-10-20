@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Sequence
 
 from sqlalchemy import select, text, func
 from sqlalchemy.orm import Session
@@ -202,6 +202,66 @@ class ArticleReviewService:
 
         next_id = self._find_next_art_id(lang, art_id)
         return {"next_art_id": next_id}
+
+    def reset_article(self, lang: str, art_id: int) -> Dict[str, Any]:
+        state = self._ensure_state(lang, art_id)
+        state.resolved_translations = None
+        state.has_notes = False
+        self.session.commit()
+
+        result = self.parser.parse_article_by_id(lang, art_id, include_raw=True)
+        self.parser.store_result(result, replace_payload=True)
+        self.session.commit()
+        return self.load_article(lang, art_id)
+
+    def reparse_articles(
+        self,
+        lang: str,
+        *,
+        art_ids: Optional[Sequence[int]] = None,
+        include_pending: bool = False,
+    ) -> Dict[str, Any]:
+        if art_ids:
+            ids = sorted(set(int(x) for x in art_ids if isinstance(x, int) or str(x).isdigit()))
+        else:
+            status_filter = ["needs_review"]
+            if include_pending:
+                status_filter.append("pending")
+            rows = self.session.execute(
+                select(ArticleParseState.art_id)
+                .where(ArticleParseState.lang == lang)
+                .where(ArticleParseState.parsing_status.in_(status_filter))
+            ).scalars()
+            ids = sorted(set(rows))
+
+        summary = {"requested": len(ids), "processed": 0, "failed": [], "skipped": 0}
+
+        if not ids:
+            summary["requested"] = 0 if art_ids else 0
+            return {"summary": summary, "updated": 0, "failed": []}
+
+        updated = 0
+        failed: List[int] = []
+        pipeline_errors: List[Dict[str, Any]] = []
+
+        for art_id in ids:
+            try:
+                result = self.parser.parse_article_by_id(lang, art_id, include_raw=True)
+                self.parser.store_result(result, replace_payload=True)
+                if result.success:
+                    updated += 1
+                else:
+                    failed.append(art_id)
+                    if result.error:
+                        pipeline_errors.append({"art_id": art_id, "error": result.error})
+            except Exception as exc:  # pragma: no cover - defensive
+                failed.append(art_id)
+                pipeline_errors.append({"art_id": art_id, "error": str(exc)})
+
+        self.session.commit()
+        summary["processed"] = updated + len(failed)
+        summary["failed"] = failed
+        return {"summary": summary, "updated": updated, "failed_details": pipeline_errors}
 
     def _ensure_state(self, lang: str, art_id: int) -> ArticleParseState:
         state = self.session.execute(

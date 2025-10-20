@@ -78,6 +78,24 @@
             </div>
           </q-card-section>
         </q-card>
+        <q-card flat bordered class="q-mt-lg">
+          <q-card-section class="column q-gutter-sm">
+            <div class="text-subtitle1">Сервис</div>
+            <q-btn
+              color="primary"
+              outline
+              label="Переразобрать проблемные"
+              :loading="reparseLoading"
+              :disable="reparseLoading"
+              @click="reparseArticles"
+            />
+            <q-toggle
+              v-model="includePending"
+              label="Включать непроверенные"
+              dense
+            />
+          </q-card-section>
+        </q-card>
         <q-card flat bordered class="q-mt-lg" v-if="article && article.review_notes.length">
           <q-card-section>
             <div class="text-subtitle1">Заметки парсера</div>
@@ -110,6 +128,17 @@
             <div class="text-h6">{{ article.headword }}</div>
             <div class="text-caption text-grey-7">
               Шаблон: {{ article.template || '—' }} · Статус: {{ article.parsing_status }}
+            </div>
+            <div class="q-mt-sm">
+              <q-btn
+                color="warning"
+                outline
+                size="sm"
+                label="Сбросить"
+                :loading="resetting"
+                :disable="resetting"
+                @click="resetArticle"
+              />
             </div>
           </q-card-section>
           <q-separator />
@@ -248,9 +277,12 @@ const article = ref(null);
 const groups = reactive([]);
 const comment = ref("");
 const saving = ref(false);
+const resetting = ref(false);
 const history = ref([]);
 const historyIndex = ref(-1);
 const showPendingOnly = ref(true);
+const includePending = ref(false);
+const reparseLoading = ref(false);
 
 const canGoBack = computed(() => historyIndex.value > 0);
 
@@ -456,6 +488,63 @@ const loadNextPending = async (afterId = null) => {
   } catch (err) {
     console.error(err);
     $q.notify({ type: "negative", message: "Не удалось получить следующую статью" });
+  }
+};
+
+const resetArticle = async () => {
+  if (!article.value || resetting.value) {
+    return;
+  }
+  const confirmed = window.confirm("Сбросить подтверждённые варианты для этой статьи?");
+  if (!confirmed) {
+    return;
+  }
+  resetting.value = true;
+  try {
+    const { data } = await api.post(`/admin/articles/${lang.value}/${article.value.art_id}/reset`);
+    article.value = data;
+    prepareGroups(data);
+    comment.value = "";
+    updateHistory(data.art_id, { fromHistory: true });
+    $q.notify({ type: "positive", message: "Статья сброшена" });
+  } catch (err) {
+    console.error(err);
+    $q.notify({ type: "negative", message: "Не удалось сбросить статью" });
+  } finally {
+    resetting.value = false;
+  }
+};
+
+const reparseArticles = async () => {
+  if (reparseLoading.value) {
+    return;
+  }
+  reparseLoading.value = true;
+  try {
+    const payload = {};
+    if (includePending.value) {
+      payload.include_pending = true;
+    }
+    const { data } = await api.post(`/admin/articles/${lang.value}/reparse`, payload);
+    const updated = data?.updated ?? 0;
+    const failed = data?.failed_details ?? [];
+    if (updated) {
+      $q.notify({ type: "positive", message: `Переразобрано ${updated} стат.` });
+    }
+    if (failed.length) {
+      $q.notify({
+        type: "warning",
+        message: `Не удалось обработать ${failed.length} стат.`,
+      });
+    }
+    if (article.value) {
+      await loadArticle(article.value.art_id, { fromHistory: true });
+    }
+  } catch (err) {
+    console.error(err);
+    $q.notify({ type: "negative", message: "Не удалось запустить переразбор" });
+  } finally {
+    reparseLoading.value = false;
   }
 };
 

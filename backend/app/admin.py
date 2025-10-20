@@ -71,6 +71,17 @@ class ReviewUpdateRequest(BaseModel):
 class ReviewUpdateResponse(BaseModel):
     next_art_id: Optional[int]
 
+
+class ReparseRequest(BaseModel):
+    art_ids: Optional[List[int]] = None
+    include_pending: bool = False
+
+
+class ReparseResponse(BaseModel):
+    summary: Dict[str, Any]
+    updated: int
+    failed_details: List[Dict[str, Any]]
+
 _state_lock = threading.Lock()
 _state = {
     "running": False,
@@ -231,3 +242,30 @@ def update_article_review(
         author=payload.author,
     )
     return ReviewUpdateResponse(**result)
+
+
+@router.post("/articles/{lang}/{art_id}/reset", response_model=ArticleReviewPayload)
+def reset_article_review(
+    lang: str,
+    art_id: int,
+    session=Depends(get_session),
+):
+    _ensure_lang(lang)
+    service = ArticleReviewService(session)
+    return service.reset_article(lang, art_id)
+
+
+@router.post("/articles/{lang}/reparse", response_model=ReparseResponse)
+def reparse_article_batch(
+    lang: str,
+    payload: ReparseRequest,
+    session=Depends(get_session),
+):
+    _ensure_lang(lang)
+    service = ArticleReviewService(session)
+    result = service.reparse_articles(
+        lang,
+        art_ids=payload.art_ids,
+        include_pending=payload.include_pending,
+    )
+    return ReparseResponse(**result)
