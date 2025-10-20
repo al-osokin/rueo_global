@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import argparse
+import json
 import logging
+import os
 import re
 from collections import OrderedDict
 from datetime import datetime
@@ -26,7 +28,20 @@ from app.services.article_tracking import (
 )
 
 BASE_DIR = Path(__file__).resolve().parent.parent
-DEFAULT_DATA_DIR = (BASE_DIR / "data/src").resolve()
+
+def _resolve_default_data_dir() -> Path:
+    env_value = os.getenv("RUEO_DATA_DIR")
+    if env_value:
+        candidate = Path(env_value).expanduser()
+        if not candidate.is_absolute():
+            candidate = (BASE_DIR / candidate).resolve()
+        else:
+            candidate = candidate.resolve()
+        return candidate
+    return (BASE_DIR / "data/src").resolve()
+
+
+DEFAULT_DATA_DIR = _resolve_default_data_dir()
 
 ProgressCallback = Callable[[Dict[str, Any]], None]
 
@@ -142,8 +157,9 @@ def run_import(
             stats.setdefault("eo", {}).update({"tracking": eo_summary})
         if ru_summary:
             stats.setdefault("ru", {}).update({"tracking": ru_summary})
+        stats.setdefault("meta", {})["run_at"] = run_time.isoformat()
         notify("finalizing", message="Формирование служебных файлов", stats=stats)
-        _write_status_file(data_dir, stats)
+        _write_status_file(data_dir, stats, run_time)
         notify("completed", message="Импорт завершён", stats=stats)
 
 
@@ -204,6 +220,7 @@ def _process_language(
         insert_payload = []
         for article_index, entry in enumerate(entries):
             header_lines = list(entry.get("header_lines") or [])
+            original_header_lines = list(header_lines)
             updated_lines = tracker.process_article(
                 file_state=file_state,
                 article_index=article_index,
@@ -212,6 +229,10 @@ def _process_language(
                 checksum=entry.get("checksum") or "",
                 header_lines=header_lines,
             )
+            if updated_lines is not None:
+                entry["header_lines"] = list(updated_lines)
+            if original_header_lines != entry.get("header_lines"):
+                entry["header_changed"] = True
             if updated_lines:
                 entry["komento"] = ", ".join(updated_lines)
             insert_payload.append(
@@ -224,6 +245,7 @@ def _process_language(
             )
 
         tracker.finalize_file(file_state)
+        _rewrite_source_file_if_needed(file_path, entries)
         session.execute(insert(article_table), insert_payload)
         total_inserted += len(insert_payload)
         if progress_callback:
@@ -241,11 +263,13 @@ def _process_language(
 
 def _parse_articles(file_path: Path) -> List[Dict[str, Optional[str]]]:
     raw = file_path.read_bytes()
-    text_cp = raw.decode("cp1251")
+    text_original = raw.decode("cp1251")
+    text_cp = text_original
     text_cp += "\r\n\r\n"
 
     entries: List[Dict[str, Optional[str]]] = []
     canonical_counts: Dict[str, int] = {}
+    original_length = len(text_original)
     for match in ARTICLE_PATTERN.finditer(text_cp):
         redaktoroj = match.group("redaktoroj") or ""
         header_lines = [
@@ -253,25 +277,92 @@ def _parse_articles(file_path: Path) -> List[Dict[str, Optional[str]]]:
             for line in redaktoroj.replace("\r\n", "\n").split("\n")
             if line.strip()
         ]
-        priskribo = match.group("vorto").rstrip()
+        body_raw = match.group("vorto") or ""
+        priskribo = body_raw.rstrip()
         canonical_key = extract_canonical_key(priskribo)
         if not canonical_key:
             canonical_key = f"{file_path.name}#{len(entries)}"
         occurrence = canonical_counts.get(canonical_key, 0)
         canonical_counts[canonical_key] = occurrence + 1
 
+        span_start, span_end = match.span()
+        span_start = min(span_start, original_length)
+        span_end = min(span_end, original_length)
+
+        total_header_text = redaktoroj
+        total_body_text = body_raw
+        matched_original = text_original[span_start:span_end]
+        consumed = len(total_header_text) + len(total_body_text)
+        if consumed > len(matched_original):
+            consumed = len(matched_original)
+        total_tail = matched_original[consumed:]
         checksum = calculate_checksum_from_text(priskribo)
         entries.append(
             {
                 "komento": (", ".join(header_lines) if header_lines else None),
                 "priskribo": priskribo,
                 "header_lines": header_lines,
+                "original_header_text": total_header_text,
+                "body_raw": body_raw,
+                "tail_text": total_tail,
+                "full_block": match.group(0),
+                "header_changed": False,
+                "span": (span_start, span_end),
                 "canonical_key": canonical_key,
                 "canonical_occurrence": occurrence,
                 "checksum": checksum,
             }
         )
     return entries
+
+
+def _rewrite_source_file_if_needed(file_path: Path, entries: Sequence[Dict[str, Any]]) -> None:
+    if not any(entry.get("header_changed") for entry in entries):
+        return
+
+    try:
+        original_text = file_path.read_text(encoding="cp1251")
+    except (UnicodeDecodeError, FileNotFoundError):
+        return
+
+    pieces: List[str] = []
+    last_pos = 0
+    text_length = len(original_text)
+
+    for entry in entries:
+        span = entry.get("span")
+        if not span:
+            continue
+        start, end = span
+        start = min(start, text_length)
+        end = min(end, text_length)
+        pieces.append(original_text[last_pos:start])
+
+        header_lines = entry.get("header_lines") or []
+        original_header_text = entry.get("original_header_text") or ""
+        body_raw = entry.get("body_raw") or ""
+        full_block = entry.get("full_block") or (original_header_text + body_raw)
+
+        line_break = "\r\n" if "\r\n" in original_header_text else "\n"
+        if header_lines:
+            header_text = line_break.join(header_lines) + line_break
+        else:
+            header_text = ""
+
+        consumed = len(original_header_text) + len(body_raw)
+        suffix = ""
+        if full_block and consumed <= len(full_block):
+            suffix = full_block[consumed:]
+        if not suffix:
+            suffix = line_break * 2
+
+        pieces.append(header_text + body_raw + suffix)
+        last_pos = end
+
+    pieces.append(original_text[last_pos:])
+    new_text = "".join(pieces)
+    if new_text != original_text:
+        file_path.write_text(new_text, encoding="cp1251")
 
 
 def _create_index_table(
@@ -580,6 +671,7 @@ def _save_last_ru_letter(data_dir: Path, last_word: str) -> None:
 def _write_status_file(
     data_dir: Path,
     stats: Dict[str, Dict[str, Any]],
+    run_time: datetime,
 ) -> None:
     base_dir = data_dir
     if base_dir.name == "src":
@@ -600,11 +692,75 @@ def _write_status_file(
         f"большой эсперанто-русский словарь в актуальной редакции, {eo_words} cлова в {eo_articles} словарных статьях;\n"
         f"рабочие материалы большого русско-эсперантского словаря ({range_text}), {ru_ready_words} cлов в {ru_ready_articles} словарных статьях."
     )
-    klarigo_path = tekstoj_dir / "klarigo.textile"
+    klarigo_path = tekstoj_dir / "klarigo.md"
     try:
         klarigo_path.write_text(content, encoding="utf-8")
     except PermissionError as exc:
         LOGGER.warning("Не удалось записать %s: %s", klarigo_path, exc)
+
+    tracking_summary = {
+        "run_at": stats.get("meta", {}).get("run_at") or run_time.isoformat(),
+        "eo": stats.get("eo", {}).get("tracking", {}),
+        "ru": stats.get("ru", {}).get("tracking", {}),
+    }
+    tracking_path = tekstoj_dir / "tracking-summary.json"
+    try:
+        tracking_path.write_text(
+            json.dumps(tracking_summary, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+    except PermissionError as exc:
+        LOGGER.warning("Не удалось записать %s: %s", tracking_path, exc)
+
+    _update_renovigxo_file(tekstoj_dir, run_time)
+
+
+def _format_russian_date(dt: datetime) -> str:
+    months = {
+        1: "января",
+        2: "февраля",
+        3: "марта",
+        4: "апреля",
+        5: "мая",
+        6: "июня",
+        7: "июля",
+        8: "августа",
+        9: "сентября",
+        10: "октября",
+        11: "ноября",
+        12: "декабря",
+    }
+    month_name = months.get(dt.month, "")
+    return f"{dt.day} {month_name} {dt.year} года"
+
+
+def _update_renovigxo_file(tekstoj_dir: Path, run_time: datetime) -> None:
+    renovigxo_path = tekstoj_dir / "renovigxo.md"
+    latest_entry = _format_russian_date(run_time)
+
+    existing_lines: List[str] = []
+    if renovigxo_path.exists():
+        try:
+            existing_lines = [
+                line.rstrip("\n")
+                for line in renovigxo_path.read_text(encoding="utf-8").splitlines()
+                if line.strip()
+            ]
+        except UnicodeDecodeError:
+            existing_lines = []
+        except PermissionError as exc:
+            LOGGER.warning("Не удалось прочитать %s: %s", renovigxo_path, exc)
+            return
+
+    if existing_lines and existing_lines[0] == latest_entry:
+        lines = existing_lines
+    else:
+        lines = [latest_entry, *existing_lines]
+
+    try:
+        renovigxo_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    except PermissionError as exc:
+        LOGGER.warning("Не удалось записать %s: %s", renovigxo_path, exc)
 
 
 def parse_args(argv: Optional[Iterable[str]] = None) -> argparse.Namespace:

@@ -93,7 +93,9 @@
     <h3 v-if="showCaptions">Открыты для поиска:</h3>
     <div class="flex-break" />
     <ul v-if="showCaptions">
-      <li v-for="(item, index) in liCaption" :key="index">{{ item }}</li>
+      <li v-for="(item, index) in filteredLiCaption" :key="index">
+        {{ item }}
+      </li>
     </ul>
     <div v-show="showCaptions" class="wrap full-width">
       <NewsFeed v-if="showCaptions" :maxItems="5" />
@@ -172,6 +174,14 @@ export default {
             "большой эсперанто-русский словарь в актуальной редакции, 92492 слова в 46265 словарных статьях;",
             "рабочие материалы большого русско-эсперантского словаря (диапазон А — правнучка), 51060 слов в 31461 словарной статье.",
           ];
+    },
+    filteredLiCaption: function () {
+      return this.liCaption.filter((item) => {
+        if (!item) {
+          return false;
+        }
+        return !item.toLowerCase().startsWith("открыты для поиска");
+      });
     },
     showCaptions: function () {
       return !(

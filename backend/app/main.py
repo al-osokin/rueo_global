@@ -46,10 +46,29 @@ def serve_admin_ui():
 
 @app.get("/status/info")
 def status_info():
-    klarigo_path = DATA_DIR / "tekstoj" / "klarigo.textile"
+    klarigo_path = DATA_DIR / "tekstoj" / "klarigo.md"
     if not klarigo_path.exists():
         raise HTTPException(status_code=404, detail="Файл с информацией об обновлении не найден")
-    return {"text": klarigo_path.read_text(encoding="utf-8")}
+    renovigxo_path = DATA_DIR / "tekstoj" / "renovigxo.md"
+    date_line = ""
+    if renovigxo_path.exists():
+        try:
+            date_lines = [
+                line.strip()
+                for line in renovigxo_path.read_text(encoding="utf-8").splitlines()
+                if line.strip()
+            ]
+            if date_lines:
+                date_line = date_lines[0]
+        except UnicodeDecodeError:
+            date_line = ""
+
+    body = klarigo_path.read_text(encoding="utf-8")
+    if date_line:
+        combined = f"Словарь обновлён {date_line}\n{body}"
+    else:
+        combined = body
+    return {"text": combined}
 
 
 DbSession = Annotated[Session, Depends(get_session)]

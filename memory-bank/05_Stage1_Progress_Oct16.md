@@ -3,7 +3,7 @@
 ## Импорт данных
 
 - Создан модуль `backend/app/importer.py`, реализующий перенос логики `vortaro_updater_8.php`.
-- Поддерживается чтение исходных текстов из `backend/data/src` с конвертацией из cp1251 в UTF-8 и генерацией файла `tekstoj/klarigo.textile`.
+- Поддерживается чтение исходных текстов из `backend/data/src` с конвертацией из cp1251 в UTF-8 и генерацией файла `tekstoj/klarigo.md`.
 - Заполняются таблицы `artikoloj` и `artikoloj_ru`, формируются поисковые индексы `sercxo`, `sercxo_ru`, а также таблица `neklaraj`.
 - Добавлены параметры CLI (`--data-dir`, `--no-truncate`, `--verbose`) и повторное использование для фонового запуска из админки.
 
