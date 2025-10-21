@@ -2,6 +2,26 @@
   <q-page class="q-pa-md q-gutter-lg admin-review">
     <div class="row q-col-gutter-lg">
       <div class="col-12 col-md-4">
+        <q-card flat bordered class="q-mb-lg">
+          <q-card-section class="column q-gutter-xs">
+            <div class="text-h6">Статистика</div>
+            <div class="text-body1">
+              На проверку:
+              <span class="text-weight-medium">
+                {{ formatNumber(stats.needs_review) }}
+                <span class="text-grey-7" v-if="stats.total"> ({{ formatPercent(stats.needs_review, stats.total) }})</span>
+              </span>
+            </div>
+            <div class="text-body1">
+              Проверено:
+              <span class="text-weight-medium">{{ formatNumber(stats.reviewed) }}</span>
+            </div>
+            <div class="text-body1 text-grey-7">
+              Всего статей:
+              <span class="text-weight-medium">{{ formatNumber(stats.total) }}</span>
+            </div>
+          </q-card-section>
+        </q-card>
         <q-card flat bordered>
           <q-card-section class="column q-gutter-md">
             <div class="text-h6">Поиск статьи</div>
@@ -268,6 +288,11 @@ const langOptions = [
 ];
 
 const lang = ref("eo");
+const stats = reactive({
+  total: 0,
+  needs_review: 0,
+  reviewed: 0,
+});
 const suggestions = ref([]);
 const loadingSuggestions = ref(false);
 const selectedArtId = ref(null);
@@ -291,6 +316,21 @@ const formatDate = (value) => {
   return new Date(value).toLocaleString();
 };
 
+const formatNumber = (value) => {
+  const number = Number.isFinite(value) ? value : 0;
+  return new Intl.NumberFormat("ru-RU").format(number);
+};
+
+const formatPercent = (part, total) => {
+  const numerator = Number(part);
+  const denominator = Number(total);
+  if (!Number.isFinite(numerator) || !Number.isFinite(denominator) || denominator <= 0) {
+    return "0.0%";
+  }
+  const percent = (numerator / denominator) * 100;
+  return `${percent.toFixed(1)}%`;
+};
+
 const normalizeItemsKey = (items) => {
   if (!Array.isArray(items)) {
     return "";
@@ -303,6 +343,21 @@ const formatItems = (items) => {
     return "—";
   }
   return items.join(" | ");
+};
+
+const loadStats = async () => {
+  try {
+    const { data } = await api.get(`/admin/articles/${lang.value}/stats`);
+    stats.total = data?.total ?? 0;
+    stats.needs_review = data?.needs_review ?? 0;
+    stats.reviewed = data?.reviewed ?? 0;
+  } catch (err) {
+    console.error(err);
+    stats.total = 0;
+    stats.needs_review = 0;
+    stats.reviewed = 0;
+    $q.notify({ type: "negative", message: "Не удалось получить статистику" });
+  }
 };
 
 const applyCandidateSelection = (group, candidateId = null) => {
@@ -346,6 +401,7 @@ watch(lang, () => {
   clearArticle();
   history.value = [];
   historyIndex.value = -1;
+  loadStats();
 });
 
 watch(showPendingOnly, () => {
@@ -512,6 +568,7 @@ const resetArticle = async () => {
     $q.notify({ type: "negative", message: "Не удалось сбросить статью" });
   } finally {
     resetting.value = false;
+    await loadStats();
   }
 };
 
@@ -540,6 +597,7 @@ const reparseArticles = async () => {
     if (article.value) {
       await loadArticle(article.value.art_id, { fromHistory: true });
     }
+    await loadStats();
   } catch (err) {
     console.error(err);
     $q.notify({ type: "negative", message: "Не удалось запустить переразбор" });
@@ -584,6 +642,7 @@ const saveAndGo = async (direction = "next") => {
     await api.post(`/admin/articles/${lang.value}/${article.value.art_id}`, payload);
     $q.notify({ type: "positive", message: "Сохранено" });
     comment.value = "";
+    await loadStats();
     if (direction === "prev") {
       const targetIndex = historyIndex.value - 1;
       const prevId = history.value[targetIndex];
@@ -605,6 +664,7 @@ const saveAndGo = async (direction = "next") => {
 };
 
 onMounted(() => {
+  loadStats();
   loadNextPending();
 });
 

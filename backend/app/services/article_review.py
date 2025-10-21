@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any, Dict, List, Optional, Sequence
 
 from sqlalchemy import select, text, func
@@ -57,6 +58,37 @@ class ArticleReviewService:
             }
             for art_id, headword, status in rows
         ]
+
+    def get_statistics(self, lang: str) -> Dict[str, int]:
+        total = self.session.execute(
+            select(func.count())
+            .select_from(ArticleParseState)
+            .where(ArticleParseState.lang == lang)
+        ).scalar_one()
+
+        needs_review = self.session.execute(
+            select(func.count())
+            .select_from(ArticleParseState)
+            .where(
+                ArticleParseState.lang == lang,
+                ArticleParseState.parsing_status == "needs_review",
+            )
+        ).scalar_one()
+
+        reviewed = self.session.execute(
+            select(func.count())
+            .select_from(ArticleParseState)
+            .where(
+                ArticleParseState.lang == lang,
+                ArticleParseState.reviewed_at.is_not(None),
+            )
+        ).scalar_one()
+
+        return {
+            "total": int(total or 0),
+            "needs_review": int(needs_review or 0),
+            "reviewed": int(reviewed or 0),
+        }
 
     def get_queue_item(
         self,
@@ -198,6 +230,10 @@ class ArticleReviewService:
 
         updated_result = self.parser.parse_article_by_id(lang, art_id, include_raw=True)
         state.parsing_status = "needs_review" if updated_result.needs_review else "reviewed"
+        if state.parsing_status == "reviewed":
+            state.reviewed_at = datetime.utcnow()
+        else:
+            state.reviewed_at = None
         self.session.commit()
 
         next_id = self._find_next_art_id(lang, art_id)
@@ -207,6 +243,7 @@ class ArticleReviewService:
         state = self._ensure_state(lang, art_id)
         state.resolved_translations = None
         state.has_notes = False
+        state.reviewed_at = None
         self.session.commit()
 
         result = self.parser.parse_article_by_id(lang, art_id, include_raw=True)
@@ -332,6 +369,12 @@ class ArticleReviewService:
             text(
                 "ALTER TABLE article_parse_state "
                 "ADD COLUMN IF NOT EXISTS has_notes BOOLEAN DEFAULT FALSE NOT NULL"
+            )
+        )
+        self.session.execute(
+            text(
+                "ALTER TABLE article_parse_state "
+                "ADD COLUMN IF NOT EXISTS reviewed_at TIMESTAMP WITHOUT TIME ZONE"
             )
         )
         self.session.execute(

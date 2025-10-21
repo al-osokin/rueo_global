@@ -190,6 +190,7 @@ class ArticleParseState(Base):
     parsed_payload: Mapped[Optional[dict]] = mapped_column(JSON)
     resolved_translations: Mapped[Optional[dict]] = mapped_column(JSON)
     has_notes: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    reviewed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=False))
     parsed_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=False),
         nullable=False,

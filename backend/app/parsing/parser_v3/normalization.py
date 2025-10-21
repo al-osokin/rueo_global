@@ -408,10 +408,25 @@ def _normalize_headword(block: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def _build_ru_segments_from_translation(content: List[Dict[str, Any]]) -> Optional[List[Dict[str, Any]]]:
-    text_chunks: List[str] = []
+    filtered_items: List[Dict[str, Any]] = []
     for item in content:
-        if item.get("type") != "text":
+        if not isinstance(item, dict):
             continue
+        item_type = item.get("type")
+        if item_type == "divider":
+            divider_text = item.get("text", "")
+            if divider_text:
+                filtered_items.append(
+                    {
+                        "type": "divider",
+                        "text": divider_text,
+                        "kind": item.get("kind"),
+                    }
+                )
+            continue
+        if item_type != "text":
+            continue
+
         style = item.get("style", "regular")
         raw_text = item.get("text", "")
         if not raw_text:
@@ -422,14 +437,27 @@ def _build_ru_segments_from_translation(content: List[Dict[str, Any]]) -> Option
         if style == "regular":
             if text in {"(", ")"}:
                 continue
-            text_chunks.append(text)
+            filtered_items.append(
+                {
+                    "type": "text",
+                    "style": "regular",
+                    "text": text,
+                }
+            )
         elif style == "italic":
             if _should_include_italic_segment(text):
-                text_chunks.append(text)
-    if not text_chunks:
+                filtered_items.append(
+                    {
+                        "type": "text",
+                        "style": "italic",
+                        "text": text,
+                    }
+                )
+
+    if not filtered_items:
         return None
 
-    combined_text = " ".join(text_chunks).strip()
+    combined_text = _reconstruct_ru_text_from_content(filtered_items)
     if not combined_text:
         return None
 
@@ -475,14 +503,22 @@ def _convert_ru_segments_to_content(segments: List[Dict[str, Any]]) -> Tuple[Lis
                 if last_node.get("type") == "text" and last_node.get("style") == "regular":
                     text_before = last_node.get("text", "")
                     if text_before and not text_before.endswith((' ', '(', '—', '-', '‑')):
-                        last_node["text"] = text_before + " " + display_note
+                        if display_note.startswith("("):
+                            last_node["text"] = text_before + display_note
+                        else:
+                            last_node["text"] = text_before + " " + display_note
                     else:
                         last_node["text"] = text_before + display_note
                     term_base = prev_seg.get("text") or ""
                     if term_base:
                         variants.append(term_base)
                     if term_base or note_core:
-                        combined_variant = " ".join(filter(None, [term_base, note_core])).strip()
+                        if term_base and note_core and _looks_like_inline_suffix(note_core):
+                            combined_variant = term_base + note_core
+                        else:
+                            combined_variant = " ".join(
+                                filter(None, [term_base, note_core])
+                            ).strip()
                         if combined_variant:
                             variants.append(combined_variant)
                     i += 1
@@ -577,17 +613,24 @@ def _convert_ru_segments_to_content(segments: List[Dict[str, Any]]) -> Tuple[Lis
         ):
             first_text = item.get("text", "")
             second_text = converted[idx + 1].get("text", "")
-            if first_text.endswith(")") and "(" in first_text and second_text.startswith("`"):
-                combined = first_text + second_text
-                merged.append({"type": "text", "style": "regular", "text": combined})
-                variants.extend(_expand_pattern(combined))
-                idx += 2
-                continue
+            if first_text.endswith(")") and "(" in first_text:
+                second_start = second_text[:1]
+                if second_text and second_start not in {" ", ",", ";", ":", ".", ")"}:
+                    combined = first_text + second_text
+                    merged.append({"type": "text", "style": "regular", "text": combined})
+                    variants.extend(_expand_pattern(combined))
+                    idx += 2
+                    continue
         merged.append(item)
         idx += 1
 
     converted = merged
     return converted, _unique_preserve_order(variants)
+
+
+def _looks_like_inline_suffix(text: str) -> bool:
+    stripped = text.translate({ord("`"): None, ord("´"): None, ord("'"): None}).replace("-", "")
+    return bool(stripped) and stripped.isalpha()
 
 
 def _convert_segments_to_reference(segments: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
@@ -976,9 +1019,11 @@ def _unique_preserve_order(items: Iterable[str]) -> List[str]:
 def _merge_plain_russian_illustrations(body: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     result: List[Dict[str, Any]] = []
     for block in body:
+        if isinstance(block, dict) and block.get("children"):
+            block["children"] = _merge_plain_russian_illustrations(block.get("children", []))
         if block.get("type") == "illustration" and not block.get("eo"):
             content = block.get("content", []) or []
-            if content and all(item.get("type") in {"text", "divider"} for item in content):
+            if content and all(item.get("type") in {"text", "divider", "note"} for item in content):
                 if content:
                     target_translation = result[-1] if result and result[-1].get("type") == "translation" else None
                     if not target_translation:
@@ -990,7 +1035,27 @@ def _merge_plain_russian_illustrations(body: List[Dict[str, Any]]) -> List[Dict[
                         if item.get("type") == "text":
                             text_value = (item.get("text", "") or "").strip()
                             if text_value:
-                                target_translation.setdefault("content", []).append({
+                                content_list = target_translation.setdefault("content", [])
+                                if content_list:
+                                    last_item = content_list[-1]
+                                    if (
+                                        last_item.get("type") == "text"
+                                        and last_item.get("style") == "regular"
+                                    ):
+                                        previous_text = last_item.get("text", "")
+                                        if previous_text:
+                                            last_char = previous_text.rstrip()[-1:]
+                                            next_char = text_value[:1]
+                                            if (
+                                                last_char
+                                                and last_char not in {",", ";", ":", ".", "(", "—", "-", "‑"}
+                                                and next_char
+                                                and next_char not in {",", ";", ":", ".", ")", "—", "-", "‑"}
+                                            ):
+                                                separator = "" if previous_text.endswith((" ", "-", "—", "‑")) else " "
+                                                last_item["text"] = previous_text.rstrip() + separator + text_value
+                                                continue
+                                content_list.append({
                                     "type": "text",
                                     "style": "regular",
                                     "text": text_value,
@@ -1007,6 +1072,25 @@ def _merge_plain_russian_illustrations(body: List[Dict[str, Any]]) -> List[Dict[
                                     "type": "divider",
                                     "kind": kind,
                                     "text": divider_text,
+                                })
+                        elif item.get("type") == "note":
+                            note_text = _extract_plain_note_text(item)
+                            if not note_text:
+                                continue
+                            display_text = note_text
+                            if not display_text.startswith('('):
+                                display_text = f"({display_text})"
+                            content_list = target_translation.setdefault("content", [])
+                            if content_list and content_list[-1].get("type") == "text":
+                                previous = content_list[-1]
+                                prev_text = previous.get("text", "")
+                                separator = " " if prev_text and not prev_text.endswith(" ") else ""
+                                previous["text"] = prev_text + separator + display_text
+                            else:
+                                content_list.append({
+                                    "type": "text",
+                                    "style": "italic",
+                                    "text": display_text,
                                 })
 
                     has_near, has_far = _detect_mixed_dividers(target_translation.get("content", []))
@@ -1032,6 +1116,21 @@ def _merge_plain_russian_illustrations(body: List[Dict[str, Any]]) -> List[Dict[
                     continue
         result.append(block)
     return result
+
+
+def _extract_plain_note_text(node: Dict[str, Any]) -> str:
+    if not isinstance(node, dict):
+        return ""
+    if node.get("content"):
+        pieces: List[str] = []
+        for part in node.get("content") or []:
+            if isinstance(part, dict) and part.get("type") == "text":
+                pieces.append(part.get("text", ""))
+        raw_text = "".join(pieces)
+    else:
+        raw_text = node.get("text", "")
+    cleaned = " ".join(raw_text.replace("_", " ").split())
+    return cleaned.strip()
 
 
 def _cleanup_tilde_context(article: Dict[str, Any]) -> None:

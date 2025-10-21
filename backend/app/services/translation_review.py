@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import re
-from collections import defaultdict
+import copy
 from collections import defaultdict
 from dataclasses import dataclass, field
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
@@ -276,21 +276,71 @@ def _collect_groups_from_blocks(blocks: Iterable[Dict], section: Optional[str]) 
             notes.extend(example_notes)
             continue
 
+        if block_type == "explanation":
+            extracted_content, extra_notes = _extract_translation_from_explanation(block.get("content") or [])
+            for note in extra_notes:
+                _append_note(note)
+            if extracted_content:
+                _flush_buffer()
+                buffer_content.append(extracted_content)
+                buffer_continues = _block_indicates_continuation({"content": extracted_content})
+            continue
+
         if block_type == "translation" or (block_type == "illustration" and not block.get("eo")):
             block_number = block.get("number")
             if buffer_content and block_number is not None:
                 _flush_buffer()
             block_requires_review = bool(block.get("ru_requires_review"))
             block_continuation = _block_indicates_continuation(block)
+            is_plain_illustration = block_type == "illustration" and not block.get("eo")
+            merge_suffix = False
+            if is_plain_illustration and buffer_content:
+                raw_content = block.get("content") or []
+                if raw_content:
+                    leading_node = raw_content[0]
+                    remaining_nodes = raw_content[1:]
+                    if (
+                        isinstance(leading_node, dict)
+                        and leading_node.get("type") == "text"
+                        and all(isinstance(node, dict) and node.get("type") == "divider" for node in remaining_nodes)
+                    ):
+                        merge_suffix = True
+            should_force_flush = is_plain_illustration and not merge_suffix
             if (
                 buffer_content
-                and not buffer_requires_review
-                and not block_requires_review
-                and not buffer_continues
+                and (
+                    (
+                        not buffer_requires_review
+                        and not block_requires_review
+                        and not buffer_continues
+                        and not merge_suffix
+                    )
+                    or should_force_flush
+                )
             ):
                 _flush_buffer()
 
-            buffer_content.append(block.get("content") or [])
+            cloned_content = _clone_nodes(block.get("content") or [])
+            if cloned_content:
+                if merge_suffix and buffer_content:
+                    previous_chunk = buffer_content[-1]
+                    leading = cloned_content[0]
+                    trailing = cloned_content[1:]
+                    if (
+                        previous_chunk
+                        and isinstance(leading, dict)
+                        and leading.get("type") == "text"
+                        and isinstance(previous_chunk[-1], dict)
+                        and previous_chunk[-1].get("type") == "text"
+                        and all(isinstance(node, dict) and node.get("type") == "divider" for node in trailing)
+                    ):
+                        merged_text = _join_parts(previous_chunk[-1].get("text", ""), leading.get("text", ""))
+                        previous_chunk[-1]["text"] = merged_text
+                        if trailing:
+                            previous_chunk.extend(trailing)
+                        cloned_content = []
+                if cloned_content:
+                    buffer_content.append(cloned_content)
             if block_requires_review:
                 buffer_requires_review = True
             buffer_continues = block_continuation
@@ -300,14 +350,15 @@ def _collect_groups_from_blocks(blocks: Iterable[Dict], section: Optional[str]) 
                 if child_type == "translation":
                     if buffer_content and child.get("number") is not None:
                         _flush_buffer()
-                    child_content = _normalize_labelled_content(child.get("content") or [])
+                    child_content_raw = _clone_nodes(child.get("content") or [])
+                    child_content = _normalize_labelled_content(child_content_raw)
                     if child_content:
                         buffer_content.append(child_content)
                         if child.get("ru_requires_review"):
                             buffer_requires_review = True
                         buffer_continues = _block_indicates_continuation(child)
                 elif child_type == "illustration" and not child.get("eo"):
-                    child_content = child.get("content") or []
+                    child_content = _clone_nodes(child.get("content") or [])
                     if child_content:
                         buffer_content.append(child_content)
                         if child.get("ru_requires_review"):
@@ -386,6 +437,17 @@ def _split_translation_groups(content: Iterable[Dict]) -> Tuple[List[Dict[str, L
     extra_notes: List[str] = []
 
     content = _merge_adjacent_text_nodes(_expand_inline_dividers(list(content)))
+    content = _merge_proverb_like_segments(content)
+
+    proverb_phrase = _extract_proverb_phrase(content)
+    proverb_notes: List[str] = []
+    if proverb_phrase:
+        for node in content:
+            if node.get("type") == "note":
+                note_text = _extract_note_text(node)
+                if note_text:
+                    proverb_notes.append(note_text)
+        return ([{"base": [proverb_phrase], "expanded": [proverb_phrase]}], proverb_notes)
 
     def _flush_builder() -> None:
         phrases = builder.flush()
@@ -476,6 +538,94 @@ def _merge_adjacent_text_nodes(nodes: List[Dict[str, Any]]) -> List[Dict[str, An
     return merged
 
 
+def _merge_proverb_like_segments(nodes: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    if not nodes:
+        return nodes
+
+    has_proverb_label = any(
+        node.get("type") == "label" and _is_proverb_label(node.get("text"))
+        for node in nodes
+        if isinstance(node, dict)
+    )
+    if not has_proverb_label:
+        return nodes
+
+    merged: List[Dict[str, Any]] = []
+    pending_text: Optional[str] = None
+
+    def _flush_pending() -> None:
+        nonlocal pending_text
+        if pending_text is not None:
+            merged.append({"type": "text", "style": "regular", "text": _clean_spacing(pending_text)})
+            pending_text = None
+
+    for node in nodes:
+        if not isinstance(node, dict):
+            _flush_pending()
+            merged.append(node)
+            continue
+
+        node_type = node.get("type")
+        if node_type == "text" and (node.get("style") or "regular") == "regular":
+            text_value = node.get("text", "")
+            if pending_text is None:
+                pending_text = text_value
+            else:
+                needs_space = bool(text_value) and not text_value.startswith((",", ";", ":", ".", " "))
+                if needs_space and pending_text and not pending_text.endswith(" "):
+                    pending_text += " "
+                pending_text += text_value
+            continue
+
+        if node_type == "divider" and (node.get("text") or "").strip() == ",":
+            if pending_text is None:
+                merged.append(node)
+            else:
+                if not pending_text.rstrip().endswith(","):
+                    pending_text = pending_text.rstrip() + ","
+            continue
+
+        _flush_pending()
+        merged.append(node)
+
+    _flush_pending()
+    return merged
+
+
+def _is_proverb_label(text: Optional[str]) -> bool:
+    if not text:
+        return False
+    lowered = text.strip().lower()
+    return any(keyword in lowered for keyword in ("посл", "погов", "афор"))
+
+
+def _extract_proverb_phrase(nodes: List[Dict[str, Any]]) -> Optional[str]:
+    if not nodes:
+        return None
+    if not any(node.get("type") == "label" and _is_proverb_label(node.get("text")) for node in nodes if isinstance(node, dict)):
+        return None
+
+    text_nodes = [node for node in nodes if isinstance(node, dict) and node.get("type") == "text" and (node.get("style") or "regular") == "regular"]
+    if not text_nodes:
+        return None
+    if len(text_nodes) == 1:
+        phrase = _clean_spacing(text_nodes[0].get("text", ""))
+        if "," not in phrase:
+            return None
+        return phrase or None
+
+    dividers = [node for node in nodes if isinstance(node, dict) and node.get("type") == "divider" and (node.get("text") or "").strip()]
+    unexpected_divider = any(node.get("text") not in {",", ";"} for node in dividers)
+    if unexpected_divider:
+        return None
+
+    combined_parts: List[str] = []
+    for node in text_nodes:
+        combined_parts.append(node.get("text", ""))
+    phrase = _clean_spacing(" ".join(part for part in combined_parts if part))
+    return phrase or None
+
+
 _PREPOSITION_PREFIXES = {"в", "во", "на", "по", "к", "ко", "с", "со", "про", "для", "при"}
 _IGNORABLE_LABELS = {"т.е", "т.е.", "т.е", "т. е.", "т. е"}
 
@@ -564,9 +714,10 @@ class _PhraseBuilder:
         base_options = self.components[-1]
         seen = {opt for opt in base_options}
         for option in options:
-            if option not in seen:
-                base_options.append(option)
-                seen.add(option)
+            enriched = _inherit_prose_prefix(base_options, option)
+            if enriched not in seen:
+                base_options.append(enriched)
+                seen.add(enriched)
 
     def add_note(self, note: str) -> None:
         cleaned = _clean_spacing(note.replace("_", " "))
@@ -616,6 +767,24 @@ class _PhraseBuilder:
         return notes
 
 
+def _inherit_prose_prefix(base_options: Sequence[str], candidate: str) -> str:
+    if not candidate or " " in candidate:
+        return candidate
+
+    for option in reversed(base_options):
+        if not option:
+            continue
+        stripped = option.strip()
+        last_space = stripped.rfind(" ")
+        if last_space <= 0:
+            continue
+        prefix = stripped[: last_space + 1]
+        combined = _clean_spacing(prefix + candidate)
+        if combined:
+            return combined
+    return candidate
+
+
 def _extract_note_text(node: Dict) -> str:
     if node.get("content"):
         return _consume_text(node.get("content") or [])
@@ -629,18 +798,86 @@ def _extract_note_alternatives(text: str) -> Optional[List[str]]:
         return None
     if not any(keyword in cleaned.lower() for keyword in ("или", "либо", "/")):
         return None
-    parts = [
-        part.strip(" ,;/")
-        for part in _ALT_SPLIT_RE.split(cleaned)
-        if part.strip(" ,;/")
-    ]
+    def _normalize_option(value: str) -> str:
+        stripped = value.strip()
+        stripped = stripped.strip(" ,;/:")
+        stripped = stripped.strip("()[]{}")
+        return _clean_spacing(stripped)
+
+    parts = []
+    for raw_part in _ALT_SPLIT_RE.split(cleaned):
+        candidate = _normalize_option(raw_part)
+        if candidate:
+            parts.append(candidate)
     if len(parts) == 1:
-        tokens = [token.strip() for token in parts[0].split() if token.strip()]
+        tokens = [_normalize_option(token) for token in parts[0].split() if _normalize_option(token)]
         if len(tokens) > 1:
             parts = tokens
     if not parts:
         return None
     return parts
+
+
+def _extract_translation_from_explanation(content: Iterable[Dict]) -> Tuple[List[Dict], List[str]]:
+    translation_nodes: List[Dict] = []
+    notes: List[str] = []
+
+    for node in content:
+        if not isinstance(node, dict):
+            continue
+        node_type = node.get("type")
+        if node_type == "text":
+            raw_text = node.get("text", "")
+            if not raw_text:
+                continue
+            style = node.get("style", "regular")
+            if style == "italic":
+                cleaned_note = _clean_spacing(raw_text.replace("_", " "))
+                cleaned_note = cleaned_note.strip("()")
+                if cleaned_note:
+                    notes.append(cleaned_note)
+                continue
+            translation_nodes.append(
+                {
+                    "type": "text",
+                    "style": "regular",
+                    "text": raw_text,
+                    "kind": node.get("kind"),
+                }
+            )
+        elif node_type == "divider":
+            divider_text = node.get("text", "")
+            if divider_text:
+                translation_nodes.append(
+                    {
+                        "type": "divider",
+                        "text": divider_text,
+                        "kind": node.get("kind"),
+                    }
+                )
+        elif node_type == "note":
+            note_text = _extract_note_text(node)
+            if note_text:
+                notes.append(note_text)
+
+    translation_nodes = _normalize_labelled_content(translation_nodes)
+    cleaned_nodes: List[Dict] = []
+    for item in translation_nodes:
+        if item.get("type") == "text":
+            text = _clean_spacing(item.get("text", ""))
+            if not text:
+                continue
+            new_item = dict(item)
+            new_item["text"] = text
+            cleaned_nodes.append(new_item)
+        else:
+            cleaned_nodes.append(item)
+
+    return cleaned_nodes, notes
+
+
+def _clone_nodes(nodes: Iterable[Dict]) -> List[Dict]:
+    return [copy.deepcopy(node) for node in nodes if isinstance(node, dict)]
 
 
 def _expand_parenthetical_forms(phrase: str) -> List[str]:
@@ -660,6 +897,8 @@ def _expand_parenthetical_forms(phrase: str) -> List[str]:
 
         inside_clean = inside.strip()
         if not inside_clean:
+            return _recurse(before + after)
+        if "=" in inside_clean:
             return _recurse(before + after)
 
         lower = inside_clean.lower()
@@ -832,7 +1071,7 @@ def _expand_cross_product(items: List[str]) -> List[str]:
                 combinations.append(_clean_spacing(f"{prefix} {option}"))
         return _deduplicate(combinations)
 
-    if adjective_candidates and len(adjective_candidates) > 1:
+    if adjective_candidates and len(adjective_candidates) > 1 and len(multi) > 1:
         combos = [
             _clean_spacing(f"{adj} {suffix}") for adj in adjective_candidates
         ]

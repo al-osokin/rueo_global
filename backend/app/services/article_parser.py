@@ -97,6 +97,7 @@ class ArticleParserService:
             status = result.error or "failed"
         else:
             status = "needs_review" if result.needs_review else "reviewed"
+        is_reviewed = status == "reviewed"
         state = self.session.execute(
             select(ArticleParseState).where(
                 ArticleParseState.lang == result.lang,
@@ -130,6 +131,9 @@ class ArticleParserService:
             state.parsed_payload = result.raw
         elif state.parsed_payload is None and result.raw is not None:
             state.parsed_payload = result.raw
+
+        if not is_reviewed:
+            state.reviewed_at = None
 
         self.session.add(state)
 

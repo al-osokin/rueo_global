@@ -62,6 +62,12 @@ class ArticleReviewPayload(BaseModel):
     review_notes: List[str]
 
 
+class ArticleStats(BaseModel):
+    total: int
+    needs_review: int
+    reviewed: int
+
+
 class ReviewUpdateRequest(BaseModel):
     resolved_translations: Optional[Dict[str, Any]] = None
     comment: Optional[str] = None
@@ -216,6 +222,14 @@ def next_article(
     if mode == "spotcheck":
         return service.get_queue_item(lang, status="reviewed", random=True)
     return service.get_queue_item(lang, status="needs_review", after=after)
+
+
+@router.get("/articles/{lang}/stats", response_model=ArticleStats)
+def get_article_stats(lang: str, session=Depends(get_session)):
+    _ensure_lang(lang)
+    service = ArticleReviewService(session)
+    stats = service.get_statistics(lang)
+    return ArticleStats(**stats)
 
 
 @router.get("/articles/{lang}/{art_id}", response_model=ArticleReviewPayload)
