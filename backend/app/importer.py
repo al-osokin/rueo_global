@@ -6,7 +6,8 @@ import logging
 import os
 import re
 from collections import OrderedDict
-from datetime import datetime
+from datetime import datetime, date
+from zoneinfo import ZoneInfo
 from pathlib import Path
 from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence, Tuple
 
@@ -58,6 +59,8 @@ ARTICLE_PATTERN = re.compile(
 )
 
 HEADER_PATTERN = re.compile(r"^\[(.+?)\]", re.MULTILINE | re.DOTALL)
+STRUCTURE_HEADER_PATTERN = re.compile(r"^\d{4}-\d{2}-\d{2} \d{1,2}:\d{2} [A-Za-z0-9_]+#?$")
+STRUCTURE_WORD_PATTERN = re.compile(r"^\[[^\]]+\]")
 
 
 def _make_notifier(callback: Optional[ProgressCallback]) -> ProgressCallback:
@@ -66,6 +69,119 @@ def _make_notifier(callback: Optional[ProgressCallback]) -> ProgressCallback:
             callback({"stage": stage, **payload})
 
     return _notify
+
+
+def _detect_structure_issues(lines: Sequence[str]) -> List[Dict[str, Any]]:
+    issues: List[Dict[str, Any]] = []
+    idx = 0
+    current_headers: List[Dict[str, Any]] = []
+
+    while idx < len(lines):
+        stripped = lines[idx].strip()
+
+        if not stripped:
+            current_headers = []
+            idx += 1
+            continue
+
+        if STRUCTURE_HEADER_PATTERN.match(stripped):
+            header_block: List[Dict[str, Any]] = []
+            while idx < len(lines) and STRUCTURE_HEADER_PATTERN.match(lines[idx].strip()):
+                header_block.append({"line": idx + 1, "header": lines[idx].strip()})
+                idx += 1
+
+            current_headers = header_block
+
+            if idx >= len(lines):
+                issues.append(
+                    {
+                        "type": "header_without_word",
+                        "headers": header_block,
+                        "message": "файл заканчивается сразу после блока заголовков",
+                    }
+                )
+                break
+
+            next_stripped = lines[idx].strip()
+            if not next_stripped or not STRUCTURE_WORD_PATTERN.match(next_stripped):
+                issues.append(
+                    {
+                        "type": "header_without_word",
+                        "headers": header_block,
+                        "next_line": next_stripped,
+                    }
+                )
+            continue
+
+        if STRUCTURE_WORD_PATTERN.match(stripped) and not current_headers:
+            issues.append(
+                {
+                    "type": "word_without_header",
+                    "line": idx + 1,
+                    "word": stripped,
+                    "context": lines[max(0, idx - 3) : idx + 2],
+                }
+            )
+
+        idx += 1
+
+    return issues
+
+
+def _parse_russian_date(line: str) -> Optional[date]:
+    line = line.strip()
+    if not line:
+        return None
+    match = re.match(r"^(\d{1,2})\s+([А-Яа-яЁё]+)\s+(\d{4})", line)
+    if not match:
+        return None
+    day_str, month_str, year_str = match.groups()
+    month_map = {
+        "января": 1,
+        "февраля": 2,
+        "марта": 3,
+        "апреля": 4,
+        "мая": 5,
+        "июня": 6,
+        "июля": 7,
+        "августа": 8,
+        "сентября": 9,
+        "октября": 10,
+        "ноября": 11,
+        "декабря": 12,
+    }
+    month = month_map.get(month_str.lower())
+    if not month:
+        return None
+    try:
+        return date(int(year_str), month, int(day_str))
+    except ValueError:
+        return None
+
+
+def _load_previous_update_date(data_dir: Path) -> Optional[date]:
+    candidates = [
+        data_dir / "tekstoj" / "renovigxo.md",
+        BASE_DIR / "data" / "tekstoj" / "renovigxo.md",
+    ]
+    updates_path = next((path for path in candidates if path.exists()), None)
+    if updates_path is None:
+        return None
+    unique_dates: List[date] = []
+    with updates_path.open("r", encoding="utf-8") as fh:
+        for line in fh:
+            parsed = _parse_russian_date(line)
+            if not parsed:
+                continue
+            if not unique_dates or unique_dates[-1] != parsed:
+                unique_dates.append(parsed)
+            if len(unique_dates) >= 2:
+                break
+    if len(unique_dates) >= 2:
+        return unique_dates[1]
+    if unique_dates:
+        return unique_dates[0]
+    return None
 
 
 def run_import(
@@ -80,7 +196,15 @@ def run_import(
     notify = _make_notifier(status_callback)
     notify("initializing", message="Старт импорта данных")
 
-    run_time = datetime.now()
+    run_time = datetime.now(ZoneInfo("Europe/Moscow")).replace(tzinfo=None)
+    force_header_date: Optional[date] = None
+    header_env = os.getenv("RUEO_IMPORT_HEADER_DATE")
+    if header_env:
+        try:
+            force_header_date = datetime.strptime(header_env, "%Y-%m-%d").date()
+        except ValueError:
+            LOGGER.warning("Invalid RUEO_IMPORT_HEADER_DATE value: %s", header_env)
+    previous_update_date = _load_previous_update_date(data_dir)
     eo_summary: Dict[str, int] = {}
     ru_summary: Dict[str, int] = {}
 
@@ -91,30 +215,48 @@ def run_import(
 
         LOGGER.info("Processing Esperanto data…")
         notify("processing_files", lang="eo", current=0, total=0, message="Начало обработки файлов")
-        eo_count, eo_summary = _process_language(
+        eo_count, eo_summary, eo_structure_issues = _process_language(
             session,
             data_dir,
             "eo",
             run_time,
+            previous_update_date=previous_update_date,
+            override_fake_date=force_header_date,
+            auto_header_date=force_header_date,
             progress_callback=lambda update: notify(
                 "processing_files", lang="eo", **update
             ),
         )
         LOGGER.info("Inserted %d Esperanto articles", eo_count)
         notify("tracking_summary", lang="eo", summary=eo_summary)
+        if eo_structure_issues:
+            notify(
+                "structure_issues",
+                lang="eo",
+                issues=eo_structure_issues,
+            )
         LOGGER.info("Processing Russian data…")
         notify("processing_files", lang="ru", current=0, total=0, message="Начало обработки файлов")
-        ru_count, ru_summary = _process_language(
+        ru_count, ru_summary, ru_structure_issues = _process_language(
             session,
             data_dir,
             "ru",
             run_time,
+            previous_update_date=previous_update_date,
+            override_fake_date=force_header_date,
+            auto_header_date=force_header_date,
             progress_callback=lambda update: notify(
                 "processing_files", lang="ru", **update
             ),
         )
         LOGGER.info("Inserted %d Russian articles", ru_count)
         notify("tracking_summary", lang="ru", summary=ru_summary)
+        if ru_structure_issues:
+            notify(
+                "structure_issues",
+                lang="ru",
+                issues=ru_structure_issues,
+            )
         session.commit()
 
         LOGGER.info("Building search indices for Esperanto…")
@@ -155,8 +297,12 @@ def run_import(
         stats = _collect_stats(session, letter)
         if eo_summary:
             stats.setdefault("eo", {}).update({"tracking": eo_summary})
+        if eo_structure_issues:
+            stats.setdefault("eo", {})["structure_issues"] = eo_structure_issues
         if ru_summary:
             stats.setdefault("ru", {}).update({"tracking": ru_summary})
+        if ru_structure_issues:
+            stats.setdefault("ru", {})["structure_issues"] = ru_structure_issues
         stats.setdefault("meta", {})["run_at"] = run_time.isoformat()
         notify("finalizing", message="Формирование служебных файлов", stats=stats)
         _write_status_file(data_dir, stats, run_time)
@@ -175,6 +321,9 @@ def _process_language(
     data_dir: Path,
     lang: str,
     run_time: datetime,
+    previous_update_date: Optional[date] = None,
+    override_fake_date: Optional[date] = None,
+    auto_header_date: Optional[date] = None,
     progress_callback: Optional[ProgressCallback] = None,
 ) -> Tuple[int, Dict[str, int]]:
     lang_dir_name = LANG_DIRS[lang]
@@ -195,10 +344,26 @@ def _process_language(
         progress_callback({"current": 0, "total": total_files})
 
     total_inserted = 0
-    tracker = ArticleTracker(session, lang, run_time)
+    tracker = ArticleTracker(
+        session,
+        lang,
+        run_time,
+        previous_update_date=previous_update_date,
+        override_fake_date=override_fake_date,
+        auto_header_date=auto_header_date,
+    )
+    structure_alerts: Dict[str, List[Dict[str, Any]]] = {}
 
     for index, file_path in enumerate(files, start=1):
-        entries = _parse_articles(file_path)
+        entries, file_structure_issues = _parse_articles(file_path)
+        if file_structure_issues:
+            rel_path_str = str(Path(lang_dir_name) / file_path.name)
+            structure_alerts[rel_path_str] = file_structure_issues
+            LOGGER.warning(
+                "Обнаружены структурные проблемы в %s (%d шт.)",
+                rel_path_str,
+                len(file_structure_issues),
+            )
         if not entries:
             if progress_callback:
                 progress_callback(
@@ -245,7 +410,8 @@ def _process_language(
             )
 
         tracker.finalize_file(file_state)
-        _rewrite_source_file_if_needed(file_path, entries)
+        if lang != "eo":
+            _rewrite_source_file_if_needed(file_path, entries)
         session.execute(insert(article_table), insert_payload)
         total_inserted += len(insert_payload)
         if progress_callback:
@@ -258,15 +424,16 @@ def _process_language(
                 }
             )
 
-    return total_inserted, tracker.get_summary()
+    return total_inserted, tracker.get_summary(), structure_alerts
 
 
-def _parse_articles(file_path: Path) -> List[Dict[str, Optional[str]]]:
+def _parse_articles(file_path: Path) -> Tuple[List[Dict[str, Optional[str]]], List[Dict[str, Any]]]:
     raw = file_path.read_bytes()
     text_original = raw.decode("cp1251")
     text_cp = text_original
     text_cp += "\r\n\r\n"
 
+    structure_issues = _detect_structure_issues(text_original.splitlines())
     entries: List[Dict[str, Optional[str]]] = []
     canonical_counts: Dict[str, int] = {}
     original_length = len(text_original)
@@ -313,7 +480,7 @@ def _parse_articles(file_path: Path) -> List[Dict[str, Optional[str]]]:
                 "checksum": checksum,
             }
         )
-    return entries
+    return entries, structure_issues
 
 
 def _rewrite_source_file_if_needed(file_path: Path, entries: Sequence[Dict[str, Any]]) -> None:
@@ -338,25 +505,26 @@ def _rewrite_source_file_if_needed(file_path: Path, entries: Sequence[Dict[str, 
         end = min(end, text_length)
         pieces.append(original_text[last_pos:start])
 
-        header_lines = entry.get("header_lines") or []
         original_header_text = entry.get("original_header_text") or ""
+        header_lines = entry.get("header_lines") or []
         body_raw = entry.get("body_raw") or ""
-        full_block = entry.get("full_block") or (original_header_text + body_raw)
+        tail_text = entry.get("tail_text")
+        if tail_text is None:
+            full_block = entry.get("full_block") or (original_header_text + body_raw)
+            consumed = len(original_header_text) + len(body_raw)
+            tail_text = ""
+            if full_block and consumed <= len(full_block):
+                tail_text = full_block[consumed:]
+        tail_text = tail_text or ""
 
         line_break = "\r\n" if "\r\n" in original_header_text else "\n"
+        header_text = ""
         if header_lines:
-            header_text = line_break.join(header_lines) + line_break
-        else:
-            header_text = ""
+            header_text = line_break.join(header_lines)
+            if not header_text.endswith(line_break):
+                header_text += line_break
 
-        consumed = len(original_header_text) + len(body_raw)
-        suffix = ""
-        if full_block and consumed <= len(full_block):
-            suffix = full_block[consumed:]
-        if not suffix:
-            suffix = line_break * 2
-
-        pieces.append(header_text + body_raw + suffix)
+        pieces.append(f"{header_text}{body_raw}{tail_text}")
         last_pos = end
 
     pieces.append(original_text[last_pos:])
@@ -700,8 +868,14 @@ def _write_status_file(
 
     tracking_summary = {
         "run_at": stats.get("meta", {}).get("run_at") or run_time.isoformat(),
-        "eo": stats.get("eo", {}).get("tracking", {}),
-        "ru": stats.get("ru", {}).get("tracking", {}),
+        "eo": {
+            "tracking": stats.get("eo", {}).get("tracking", {}),
+            "structure_issues": stats.get("eo", {}).get("structure_issues", {}),
+        },
+        "ru": {
+            "tracking": stats.get("ru", {}).get("tracking", {}),
+            "structure_issues": stats.get("ru", {}).get("structure_issues", {}),
+        },
     }
     tracking_path = tekstoj_dir / "tracking-summary.json"
     try:
