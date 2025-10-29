@@ -123,7 +123,7 @@ class ArticleParserService:
 
         if result.translations:
             resolved = state.resolved_translations or {}
-            if "auto_candidates" not in resolved:
+            if replace_payload or "auto_candidates" not in resolved:
                 resolved["auto_candidates"] = result.translations
             state.resolved_translations = resolved
 
@@ -243,6 +243,9 @@ class ArticleParserService:
         headword_info = parsed.get("headword") or {}
         headword = headword_info.get("raw_form") or None
         template = (parsed.get("meta") or {}).get("template")
+        parsed.setdefault("meta", {})
+        parsed["meta"]["art_id"] = art_id
+        parsed["meta"]["lang"] = lang
         success = bool(headword)
         examples = self._extract_examples(parsed)
         review = build_translation_review(parsed)
@@ -252,11 +255,15 @@ class ArticleParserService:
             .where(ArticleParseState.lang == lang, ArticleParseState.art_id == art_id)
         ).scalar_one_or_none()
         resolved_groups = {}
+        manual_phrases: List[str] = []
         if isinstance(resolved, dict):
             resolved_groups = resolved.get("groups") or {}
+            stored_manual = resolved.get("manual_phrases")
+            if isinstance(stored_manual, list):
+                manual_phrases = [item for item in stored_manual if isinstance(item, str)]
 
         apply_candidate_selection(review, resolved_groups)
-        translations = collect_translation_phrases(review)
+        translations = collect_translation_phrases(review, manual_phrases)
 
         needs_review = False
         for index, group in enumerate(review.groups):

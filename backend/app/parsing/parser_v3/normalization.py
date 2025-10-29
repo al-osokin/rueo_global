@@ -144,6 +144,34 @@ def _contains_cyrillic(text: str) -> bool:
     return any('\u0400' <= ch <= '\u04FF' for ch in text)
 
 
+def _merge_regular_text_with_spacing(left: str, right: str) -> str:
+    if not left:
+        return right.lstrip()
+    if not right:
+        return left
+    left_trimmed = left.rstrip()
+    right_trimmed = right.lstrip()
+    if not left_trimmed:
+        return right_trimmed
+    if not right_trimmed:
+        return left_trimmed
+    left_guard = left_trimmed[-1]
+    right_guard = right_trimmed[0]
+    needs_space = (
+        left_guard not in {" ", "-", "—", "‑", "/", "("}
+        and right_guard not in {" ", ",", ";", ":", ".", ")", "!", "?", "—"}
+    )
+    merged = left_trimmed
+    if needs_space:
+        merged += " "
+    merged += right_trimmed
+    return merged
+
+
+def _normalize_spacing(value: str) -> str:
+    return re.sub(r"\s+", " ", value or "").strip()
+
+
 def _merge_illustration_continuations(block: Dict[str, Any]) -> None:
     if block.get("type") != "illustration":
         return
@@ -467,6 +495,7 @@ def _build_ru_segments_from_translation(content: List[Dict[str, Any]]) -> Option
 
 
 _ITALIC_NOTE_PATTERN = re.compile(r"\b(?:или(?:\s+же)?|либо)\b", re.IGNORECASE)
+_INLINE_REFERENCE_NOTE_PATTERN = re.compile(r"^\(=\s*<\s*([^>]+)$")
 
 
 def _should_include_italic_segment(text: str) -> bool:
@@ -493,6 +522,39 @@ def _convert_ru_segments_to_content(segments: List[Dict[str, Any]]) -> Tuple[Lis
             if not raw_note:
                 i += 1
                 continue
+            inline_match = _INLINE_REFERENCE_NOTE_PATTERN.match(raw_note)
+            if inline_match:
+                next_seg = segments[i + 1] if i + 1 < len(segments) else None
+                if next_seg and next_seg.get("kind") == "term":
+                    suffix_raw = (next_seg.get("text") or "").strip()
+                    if suffix_raw:
+                        target_prefix = inline_match.group(1).strip()
+                        needs_parenthesis = not target_prefix.endswith(")")
+                        suffix_clean = suffix_raw
+                        if suffix_clean.endswith(">)"):
+                            suffix_clean = suffix_clean[:-2]
+                        elif suffix_clean.endswith(")"):
+                            suffix_clean = suffix_clean[:-1]
+                        closing_parenthesis = ")" if needs_parenthesis else ""
+                        suffix_clean = suffix_clean.rstrip(" ,.;:")
+                        combined_target = _normalize_spacing(
+                            f"{target_prefix}{closing_parenthesis}{suffix_clean}"
+                        )
+                        display = f"(= <{combined_target}>)" if combined_target else "(=)"
+                        if (
+                            converted
+                            and converted[-1].get("type") == "text"
+                            and converted[-1].get("style") == "regular"
+                        ):
+                            base_text = converted[-1].get("text", "")
+                            spacer = "" if base_text.endswith((" ", "(", "—", "-", "‑")) else " "
+                            converted[-1]["text"] = f"{base_text}{spacer}{display}"
+                        else:
+                            converted.append({"type": "text", "style": "regular", "text": display})
+                        if combined_target:
+                            variants.append(combined_target)
+                        i += 2
+                        continue
             has_parens = raw_note.startswith('(') and raw_note.endswith(')')
             note_core = raw_note[1:-1].strip() if has_parens else raw_note
             display_note = raw_note if has_parens else f"({raw_note})"
@@ -616,7 +678,7 @@ def _convert_ru_segments_to_content(segments: List[Dict[str, Any]]) -> Tuple[Lis
             if first_text.endswith(")") and "(" in first_text:
                 second_start = second_text[:1]
                 if second_text and second_start not in {" ", ",", ";", ":", ".", ")"}:
-                    combined = first_text + second_text
+                    combined = _merge_regular_text_with_spacing(first_text, second_text)
                     merged.append({"type": "text", "style": "regular", "text": combined})
                     variants.extend(_expand_pattern(combined))
                     idx += 2

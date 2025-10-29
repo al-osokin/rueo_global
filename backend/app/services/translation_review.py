@@ -4,7 +4,11 @@ import re
 import copy
 from collections import defaultdict
 from dataclasses import dataclass, field
+from functools import lru_cache
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
+
+from app.database import SessionLocal
+from app.models import Article, ArticleRu
 
 
 @dataclass(slots=True)
@@ -47,12 +51,57 @@ class TranslationReview:
     notes: List[str]
 
 
+@lru_cache(maxsize=512)
+def _load_article_text(lang: str, art_id: int) -> Optional[str]:
+    if lang not in {"eo", "ru"}:
+        return None
+    model = Article if lang == "eo" else ArticleRu
+    with SessionLocal() as session:
+        record = session.get(model, art_id)
+        if not record:
+            return None
+        return record.priskribo
+
+
+@lru_cache(maxsize=512)
+def _get_article_sections(lang: str, art_id: int) -> Dict[str, List[str]]:
+    text = _load_article_text(lang, art_id)
+    if not text:
+        return {}
+    sections: Dict[str, List[str]] = {"<main>": []}
+    current = "<main>"
+    for raw_line in text.splitlines():
+        line = raw_line.rstrip("\r")
+        if not line:
+            continue
+        if line.startswith("["):
+            end_idx = line.find("]")
+            if end_idx != -1:
+                key = line[: end_idx + 1]
+                sections.setdefault(key, [])
+                current = key
+                remainder = line[end_idx + 1 :]
+                if remainder:
+                    sections[current].append(remainder)
+                continue
+        sections.setdefault(current, []).append(line)
+    return sections
+
+
 def build_translation_review(parsed_article: Dict) -> TranslationReview:
     if not isinstance(parsed_article, dict):
         return TranslationReview(headword="<без заголовка>", groups=[], notes=[])
 
     headword = (parsed_article.get("headword") or {}).get("raw_form") or "<без заголовка>"
-    groups, notes = _collect_groups_from_blocks(parsed_article.get("body") or [], section=None)
+    meta = parsed_article.get("meta") or {}
+    lang = meta.get("lang")
+    art_id = meta.get("art_id")
+    article_sections = _get_article_sections(lang, art_id) if lang and art_id else None
+    groups, notes = _collect_groups_from_blocks(
+        parsed_article.get("body") or [],
+        section=None,
+        article_sections=article_sections,
+    )
     return TranslationReview(headword=headword, groups=groups, notes=notes)
 
 
@@ -168,7 +217,11 @@ def _format_group_items(items: Sequence[str]) -> str:
     return "[" + " | ".join(cleaned) + "]"
 
 
-def _collect_groups_from_blocks(blocks: Iterable[Dict], section: Optional[str]) -> Tuple[List[TranslationGroup], List[str]]:
+def _collect_groups_from_blocks(
+    blocks: Iterable[Dict],
+    section: Optional[str],
+    article_sections: Optional[Dict[str, List[str]]],
+) -> Tuple[List[TranslationGroup], List[str]]:
     groups: List[TranslationGroup] = []
     notes: List[str] = []
     buffer_content: List[List[Dict]] = []
@@ -191,7 +244,11 @@ def _collect_groups_from_blocks(blocks: Iterable[Dict], section: Optional[str]) 
             combined.extend(chunk)
 
         label = _extract_label(combined)
-        group_specs, extra_notes = _split_translation_groups(combined)
+        group_specs, extra_notes = _split_translation_groups(
+            combined,
+            section=section,
+            article_sections=article_sections,
+        )
         for note in extra_notes:
             _append_note(note)
 
@@ -236,6 +293,10 @@ def _collect_groups_from_blocks(blocks: Iterable[Dict], section: Optional[str]) 
             elif len(items) > len(cleaned_base):
                 cleaned_base = list(items)
             items = _normalize_compound_terms(items)
+            expanded = _expand_prepositional_variations(items, cleaned_base)
+            items = expanded
+            if len(items) > len(cleaned_base):
+                cleaned_base = list(items)
             candidates = _build_translation_candidates(cleaned_base, items)
             group = TranslationGroup(
                 items=list(items),
@@ -263,6 +324,7 @@ def _collect_groups_from_blocks(blocks: Iterable[Dict], section: Optional[str]) 
             child_groups, child_notes = _collect_groups_from_blocks(
                 block.get("children") or [],
                 section=raw_form,
+                article_sections=article_sections,
             )
             groups.extend(child_groups)
             notes.extend(child_notes)
@@ -271,19 +333,78 @@ def _collect_groups_from_blocks(blocks: Iterable[Dict], section: Optional[str]) 
         if block_type == "illustration" and block.get("eo"):
             _flush_buffer()
             example_section = block.get("eo_raw") or block.get("eo")
-            example_groups, example_notes = _build_groups_from_example(block, example_section)
+            example_groups, example_notes = _build_groups_from_example(
+                block,
+                example_section,
+                article_sections,
+            )
             groups.extend(example_groups)
             notes.extend(example_notes)
             continue
 
         if block_type == "explanation":
             extracted_content, extra_notes = _extract_translation_from_explanation(block.get("content") or [])
-            for note in extra_notes:
-                _append_note(note)
+            if extracted_content and buffer_content:
+                has_regular = any(
+                    node.get("type") == "text" and node.get("style") == "regular"
+                    for node in extracted_content
+                )
+                if has_regular:
+                    _flush_buffer()
+                    buffer_content.append([])
+                last_chunk = buffer_content[-1]
+                _trim_trailing_parenthesis(last_chunk)
+                first_node = extracted_content[0] if extracted_content else None
+                if first_node and first_node.get("type") == "text":
+                    for node in reversed(last_chunk):
+                        if node.get("type") != "text":
+                            continue
+                        existing_text = node.get("text", "")
+                        if _has_unclosed_parenthesis(existing_text):
+                            if "(" in existing_text:
+                                pivot = existing_text.rfind("(")
+                                trimmed_text = existing_text[:pivot].rstrip()
+                                node["text"] = trimmed_text
+                            else:
+                                trimmed_text = existing_text
+                            raw_text = first_node.get("text", "")
+                            stripped = raw_text.lstrip()
+                            leading_ws_len = len(raw_text) - len(stripped)
+                            leading_ws = raw_text[:leading_ws_len]
+                            if stripped:
+                                if stripped.startswith(")"):
+                                    adjusted = leading_ws + stripped
+                                else:
+                                    adjusted = f"{leading_ws}) {stripped}"
+                                first_node = dict(first_node)
+                                first_node["text"] = adjusted
+                                extracted_content = [first_node, *extracted_content[1:]]
+                            break
+            elif buffer_content and not extracted_content:
+                _trim_trailing_parenthesis(buffer_content[-1])
             if extracted_content:
-                _flush_buffer()
-                buffer_content.append(extracted_content)
+                if buffer_content:
+                    buffer_content[-1].extend(extracted_content)
+                else:
+                    buffer_content.append(extracted_content)
                 buffer_continues = _block_indicates_continuation({"content": extracted_content})
+            if extra_notes:
+                for note in extra_notes:
+                    attached = False
+                    if buffer_content:
+                        last_chunk = buffer_content[-1]
+                        for idx in range(len(last_chunk) - 1, -1, -1):
+                            candidate_node = last_chunk[idx]
+                            if candidate_node.get("type") != "text":
+                                continue
+                            candidate_text = candidate_node.get("text", "")
+                            if _has_unclosed_parenthesis(candidate_text):
+                                separator = "" if candidate_text.endswith((" ", "(", "—", "-", "‑")) else " "
+                                candidate_node["text"] = f"{candidate_text.rstrip()}{separator}{note}"
+                                attached = True
+                                break
+                    if not attached:
+                        _append_note(note)
             continue
 
         if block_type == "translation" or (block_type == "illustration" and not block.get("eo")):
@@ -377,14 +498,22 @@ def _collect_groups_from_blocks(blocks: Iterable[Dict], section: Optional[str]) 
     return groups, notes
 
 
-def _build_groups_from_example(block: Dict, section: Optional[str]) -> Tuple[List[TranslationGroup], List[str]]:
+def _build_groups_from_example(
+    block: Dict,
+    section: Optional[str],
+    article_sections: Optional[Dict[str, List[str]]],
+) -> Tuple[List[TranslationGroup], List[str]]:
     segments = block.get("ru_segments") or []
     content = _ru_segments_to_content(segments)
     if not content:
         return [], []
 
     label = _extract_label(content)
-    group_specs, extra_notes = _split_translation_groups(content)
+    group_specs, extra_notes = _split_translation_groups(
+        content,
+        section=section,
+        article_sections=article_sections,
+    )
     requires_review = bool(block.get("ru_requires_review"))
 
     groups: List[TranslationGroup] = []
@@ -428,9 +557,56 @@ def _extract_label(content: Iterable[Dict]) -> Optional[str]:
 
 
 _ALT_SPLIT_RE = re.compile(r"\b(?:или(?:\s+же)?|либо|/)\b", re.IGNORECASE)
+_PREPOSITIONAL_SPLIT_RE = re.compile(
+    r"^(?P<prep>для|из|из-за|по|при|в|во|на|с|со|от|о|об|обо|к|ко|у|за|над|под|между)\b",
+    re.IGNORECASE,
+)
+_REFERENCE_TRAIL_RE = re.compile(r"\s*[A-Za-z0-9_'`]+>$")
 
 
-def _split_translation_groups(content: Iterable[Dict]) -> Tuple[List[Dict[str, List[str]]], List[str]]:
+def _merge_clause_parts(parts: List[str]) -> List[str]:
+    result: List[str] = []
+    pending: Optional[str] = None
+
+    for part in parts:
+        segment = part.strip()
+        if not segment:
+            continue
+
+        remaining = segment
+        while remaining:
+            if ";" in remaining:
+                before, after = remaining.split(";", 1)
+                before = before.strip()
+                if pending:
+                    if before:
+                        before = _clean_spacing(f"{pending}, {before}")
+                    else:
+                        before = pending
+                    pending = None
+                if before:
+                    result.append(before)
+                remaining = after.strip()
+                continue
+
+            if pending:
+                pending = _clean_spacing(f"{pending}, {remaining}")
+            else:
+                pending = remaining
+            break
+
+    if pending:
+        result.append(pending)
+
+    return result
+
+
+def _split_translation_groups(
+    content: Iterable[Dict],
+    *,
+    section: Optional[str],
+    article_sections: Optional[Dict[str, List[str]]],
+) -> Tuple[List[Dict[str, List[str]]], List[str]]:
     builder = _PhraseBuilder()
     current_group: List[str] = []
     base_groups: List[List[str]] = []
@@ -517,7 +693,319 @@ def _split_translation_groups(content: Iterable[Dict]) -> Tuple[List[Dict[str, L
             }
         )
 
-    return results, extra_notes
+    results, extra_notes = _apply_source_fallback(
+        results,
+        content,
+        section=section,
+        article_sections=article_sections,
+        extra_notes=extra_notes,
+    )
+    normalized_results: List[Dict[str, List[str]]] = []
+    seen_notes: set[str] = set(extra_notes)
+
+    for spec in results:
+        original_base = spec.get("base") or []
+        original_expanded = spec.get("expanded") or []
+
+        base_clean, base_notes = _sanitize_spec_values(original_base)
+        expanded_clean, expanded_notes = _sanitize_spec_values(original_expanded)
+
+        base_clean = _expand_inline_synonyms_list(base_clean)
+        expanded_clean = _expand_inline_synonyms_list(expanded_clean or base_clean)
+
+        for note in (*base_notes, *expanded_notes):
+            if note and note not in seen_notes:
+                extra_notes.append(note)
+                seen_notes.add(note)
+
+        spec["base"] = base_clean
+        spec["expanded"] = expanded_clean or base_clean
+        if spec.get("auto_generated") is None:
+            spec["auto_generated"] = expanded_clean != original_expanded
+
+        normalized_results.append(spec)
+
+    return normalized_results, extra_notes
+
+
+def _normalize_note_text(note: str) -> str:
+    cleaned = note.replace("_", " ").strip()
+    if cleaned.endswith('.'):
+        cleaned = cleaned[:-1].strip()
+    return cleaned
+
+
+def _separate_trailing_note(text: str) -> Tuple[str, Optional[str]]:
+    match = re.search(r"\(([^)]+)\)\.?$", text)
+    if not match:
+        return text, None
+    note = _normalize_note_text(match.group(1))
+    cleaned = _clean_spacing(text[: match.start()])
+    return cleaned, note
+
+
+_FALLBACK_TOKEN_RE = re.compile(r"[^\s,;:]+")
+
+
+def _fallback_tokenize(value: str) -> List[str]:
+    if not value:
+        return []
+    return [
+        token
+        for token in _FALLBACK_TOKEN_RE.findall(value.replace("_", " "))
+        if token
+    ]
+
+
+def _sanitize_spec_values(values: Optional[Iterable[str]]) -> Tuple[List[str], List[str]]:
+    sanitized: List[str] = []
+    notes: List[str] = []
+    seen_notes: set[str] = set()
+
+    for raw in values or []:
+        cleaned_value = _clean_spacing((raw or "").replace("_", " "))
+        if not cleaned_value:
+            continue
+        stripped_value, note = _separate_trailing_note(cleaned_value)
+        if stripped_value:
+            stripped_value, placeholder_note = _strip_note_placeholder(stripped_value)
+            if placeholder_note and placeholder_note not in seen_notes:
+                notes.append(placeholder_note)
+                seen_notes.add(placeholder_note)
+            sanitized.append(stripped_value)
+        if note and note not in seen_notes:
+            notes.append(note)
+            seen_notes.add(note)
+
+    return _deduplicate(sanitized), notes
+
+
+_NOTE_PLACEHOLDER_RE = re.compile(
+    r"(?:\b[а-яё`]+(?:\s+[а-яё`]+)?-л\.?)$", re.IGNORECASE
+)
+
+
+def _strip_note_placeholder(value: str) -> Tuple[str, Optional[str]]:
+    match = _NOTE_PLACEHOLDER_RE.search(value)
+    if not match:
+        return value, None
+    note = match.group(0)
+    cleaned = _clean_spacing(value[: match.start()])
+    return cleaned, _normalize_note_text(note.replace("-л", "-л.").rstrip("."))
+
+
+_INLINE_CLAUSE_PREFIXES = {
+    "что",
+    "чтобы",
+    "чтоб",
+    "который",
+    "которые",
+    "которое",
+    "которую",
+    "которых",
+    "которому",
+    "когда",
+    "куда",
+    "где",
+    "если",
+    "будучи",
+    "как",
+    "будто",
+    "словно",
+}
+
+_PARTICIPLE_SUFFIXES = (
+    "ющий",
+    "ющая",
+    "ющее",
+    "ющие",
+    "ющим",
+    "ющего",
+    "ющей",
+    "ющихся",
+    "ющийся",
+    "ющаяся",
+    "ющееся",
+    "ющимся",
+    "ющегося",
+)
+
+
+def _should_attach_inline_segment(segment: str) -> bool:
+    text = _clean_spacing(segment)
+    if not text:
+        return True
+    tokens = text.split()
+    if not tokens:
+        return True
+    first = _strip_accents(tokens[0]).lower()
+    if first in _INLINE_CLAUSE_PREFIXES or any(first.startswith(prefix) for prefix in ("котор",)):
+        return True
+    if len(tokens) > 1:
+        if first.endswith(_PARTICIPLE_SUFFIXES):
+            return True
+        if first in {"то", "же"}:
+            return True
+    return False
+
+
+def _split_inline_synonyms(value: str) -> List[str]:
+    normalized = _clean_spacing(value)
+    if not normalized:
+        return []
+
+    segments: List[str] = []
+    buffer: List[str] = []
+    depth = 0
+    for char in normalized:
+        if char == "(":
+            depth += 1
+        elif char == ")":
+            if depth:
+                depth -= 1
+        if char == "," and depth == 0:
+            segment = "".join(buffer).strip()
+            if segment:
+                segments.append(segment)
+            buffer = []
+            continue
+        buffer.append(char)
+    tail = "".join(buffer).strip()
+    if tail:
+        segments.append(tail)
+
+    if not segments:
+        return []
+
+    parts: List[str] = []
+    current: Optional[str] = None
+
+    for segment in segments:
+        if not segment:
+            continue
+        if current is None:
+            current = segment
+            continue
+        if _should_attach_inline_segment(segment):
+            current = _clean_spacing(f"{current}, {segment}")
+        else:
+            parts.append(_clean_spacing(current))
+            current = segment
+
+    if current:
+        parts.append(_clean_spacing(current))
+
+    return _deduplicate(parts)
+
+
+def _expand_inline_synonyms_list(items: List[str]) -> List[str]:
+    expanded: List[str] = []
+    for item in items:
+        for chunk in _split_inline_synonyms(item):
+            expanded.extend(_expand_parenthetical_forms(chunk))
+    return _deduplicate(expanded)
+
+
+def _apply_source_fallback(
+    specs: List[Dict[str, List[str]]],
+    content: Iterable[Dict],
+    *,
+    section: Optional[str],
+    article_sections: Optional[Dict[str, List[str]]],
+    extra_notes: List[str],
+) -> Tuple[List[Dict[str, List[str]]], List[str]]:
+    if not article_sections or not section:
+        return specs, extra_notes
+    section_lines = article_sections.get(section)
+    if not section_lines:
+        return specs, extra_notes
+    # Concatenate lines preserving original separators
+    source_text = " ".join(line.strip() for line in section_lines if line.strip())
+    if not source_text or ";" not in source_text:
+        return specs, extra_notes
+
+    raw_parts = [part.strip() for part in source_text.split(";") if part.strip()]
+    if len(raw_parts) <= 1:
+        return specs, extra_notes
+
+    cleaned_parts: List[Tuple[str, Optional[str]]] = []
+    tokenized_parts: List[List[str]] = []
+    for part in raw_parts:
+        cleaned = _clean_spacing(part.replace("_", " "))
+        note_match = re.search(r"\(([^)]+)\)\.?$", cleaned)
+        note_value: Optional[str] = None
+        if note_match:
+            note_value = _normalize_note_text(note_match.group(1))
+            cleaned = _clean_spacing(cleaned[: note_match.start()])
+        cleaned_parts.append((cleaned, note_value))
+        tokenized_parts.append(_fallback_tokenize(cleaned))
+
+    source_idx = 0
+    updated_specs: List[Dict[str, List[str]]] = []
+    collected_notes = list(extra_notes)
+
+    for spec in specs:
+        candidate_items = spec.get("base") or spec.get("expanded") or []
+        normalized_items = [
+            _clean_spacing((item or "").replace("_", " "))
+            for item in candidate_items
+            if _clean_spacing((item or "").replace("_", " "))
+        ]
+        target_text = _clean_spacing(" ".join(normalized_items))
+        target_text, trailing_note = _separate_trailing_note(target_text)
+        if trailing_note and trailing_note not in collected_notes:
+            collected_notes.append(trailing_note)
+        if not target_text:
+            updated_specs.append(spec)
+            continue
+        target_tokens = _fallback_tokenize(target_text)
+        if not target_tokens:
+            updated_specs.append(spec)
+            continue
+
+        accum_texts: List[str] = []
+        accum_notes: List[Optional[str]] = []
+        accum_tokens: List[str] = []
+        start_idx = source_idx
+        matched = False
+
+        while source_idx < len(cleaned_parts):
+            part_text, part_note = cleaned_parts[source_idx]
+            part_tokens = tokenized_parts[source_idx]
+            if part_text:
+                accum_texts.append(part_text)
+            if part_note:
+                accum_notes.append(part_note)
+            source_idx += 1
+            if not part_tokens:
+                continue
+            accum_tokens.extend(part_tokens)
+            if accum_tokens == target_tokens:
+                matched = True
+                break
+            if target_tokens[: len(accum_tokens)] != accum_tokens:
+                matched = False
+                break
+
+        if not matched or not accum_texts:
+            source_idx = start_idx
+        else:
+            cleaned_list = [
+                text for text in (_clean_spacing(item) for item in accum_texts) if text
+            ]
+            cleaned_list = _deduplicate(cleaned_list)
+            if cleaned_list:
+                spec["base"] = cleaned_list
+                spec["expanded"] = cleaned_list
+                spec["auto_generated"] = True
+            for note in accum_notes:
+                if note:
+                    normalized_note = _normalize_note_text(note)
+                    if normalized_note and normalized_note not in collected_notes:
+                        collected_notes.append(normalized_note)
+        updated_specs.append(spec)
+
+    return updated_specs, collected_notes
 
 
 def _merge_adjacent_text_nodes(nodes: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
@@ -627,7 +1115,28 @@ def _extract_proverb_phrase(nodes: List[Dict[str, Any]]) -> Optional[str]:
 
 
 _PREPOSITION_PREFIXES = {"в", "во", "на", "по", "к", "ко", "с", "со", "про", "для", "при"}
-_IGNORABLE_LABELS = {"т.е", "т.е.", "т.е", "т. е.", "т. е"}
+_IGNORABLE_LABELS = {
+    "т.е",
+    "т. е",
+    "т е",
+    "то есть",
+    "см",
+    "см.",
+    "ср",
+    "ср.",
+    "мед",
+    "физ",
+    "бот",
+    "зоол",
+    "анат",
+    "ист",
+    "хим",
+    "перен",
+    "биол",
+    "линг",
+    "геол",
+    "полит",
+}
 
 
 def _split_leading_adjectives(items: List[str]) -> List[str]:
@@ -670,11 +1179,69 @@ def _normalize_compound_terms(items: List[str]) -> List[str]:
             continue
         if stripped.startswith("аб") and " аб" in stripped[1:]:
             first, rest = stripped.split(" аб", 1)
-            result.append(first)
-            result.append("аб" + rest)
-            continue
+            rest_clean = rest.replace("`", "").lower()
+            if rest_clean.startswith("орт"):
+                result.append(first)
+                result.append("аб" + rest)
+                continue
+        stripped = _REFERENCE_TRAIL_RE.sub("", stripped).rstrip()
+        stripped = re.sub(r"\s+сущ\.?$", "", stripped)
         result.append(stripped)
     return _deduplicate(result)
+
+
+def _expand_prepositional_variations(
+    items: List[str],
+    base_items: Sequence[str],
+) -> List[str]:
+    if not items:
+        return items
+
+    adjective_tokens: List[str] = []
+    for base in base_items:
+        token = _first_token(base)
+        if token and _looks_like_adjective(token):
+            adjective_tokens.append(token)
+
+    extras: List[str] = []
+    updated_items: List[str] = []
+    for item in items:
+        cleaned_item = _clean_spacing(item)
+        if not cleaned_item:
+            continue
+        tokens = cleaned_item.split()
+        if not tokens:
+            continue
+        first = _strip_accents(tokens[0]).lower()
+        if first not in _PREPOSITION_PREFIXES:
+            updated_items.append(cleaned_item)
+            continue
+
+        prep_tokens: List[str] = [tokens[0]]
+        rest_tokens: List[str] = []
+        for token in tokens[1:]:
+            normalized = _strip_accents(token).lower()
+            if normalized in _PREPOSITION_PREFIXES and not rest_tokens:
+                prep_tokens.append(token)
+                continue
+            if _looks_like_verb(token) or _looks_like_participle(token):
+                rest_tokens = tokens[len(prep_tokens):]
+                break
+            prep_tokens.append(token)
+        else:
+            rest_tokens = tokens[len(prep_tokens):]
+
+        prep_phrase = _clean_spacing(" ".join(prep_tokens))
+        remainder = _clean_spacing(" ".join(rest_tokens)) if rest_tokens else ""
+        if remainder:
+            extras.append(remainder)
+        for adjective in adjective_tokens:
+            extras.append(_clean_spacing(f"{adjective} {prep_phrase}"))
+
+    if not extras:
+        return items
+
+    return _deduplicate([*updated_items, *extras])
 
 
 def _collapse_repeated_segment(value: str) -> str:
@@ -700,9 +1267,11 @@ class _PhraseBuilder:
             return
         parts = [part.strip() for part in re.split(r",(?![^()]*\))", normalized) if part.strip()]
         if len(parts) > 1:
+            parts = _merge_clause_parts(parts)
+        if len(parts) > 1:
             self._append_component_options(parts)
         else:
-            self._append_component(normalized.rstrip(".,;:"))
+            self._append_component(normalized.rstrip(".,:"))
 
     def add_alternatives(self, alternatives: Sequence[str]) -> None:
         options = [_clean_spacing(option) for option in alternatives if _clean_spacing(option)]
@@ -736,7 +1305,7 @@ class _PhraseBuilder:
         self.components.append([text])
 
     def _append_component_options(self, options: Sequence[str]) -> None:
-        prepared = [_clean_spacing(option).rstrip(".,;:") for option in options]
+        prepared = [_clean_spacing(option).rstrip(".,:") for option in options]
         prepared = [option for option in prepared if option]
         if not prepared:
             return
@@ -821,6 +1390,24 @@ def _extract_note_alternatives(text: str) -> Optional[List[str]]:
 def _extract_translation_from_explanation(content: Iterable[Dict]) -> Tuple[List[Dict], List[str]]:
     translation_nodes: List[Dict] = []
     notes: List[str] = []
+    pending_parenthesis_close = False
+
+    def _attach_to_previous(cleaned: str) -> bool:
+        nonlocal pending_parenthesis_close
+        if not cleaned:
+            return False
+        if not translation_nodes:
+            return False
+        last_node = translation_nodes[-1]
+        if last_node.get("type") != "text" or last_node.get("style") != "regular":
+            return False
+        last_text = last_node.get("text", "")
+        if not last_text or not _has_unclosed_parenthesis(last_text):
+            return False
+        separator = "" if last_text.endswith((" ", "(", "—", "-", "‑")) else " "
+        last_node["text"] = f"{last_text.rstrip()}{separator}{cleaned}"
+        pending_parenthesis_close = True
+        return True
 
     for node in content:
         if not isinstance(node, dict):
@@ -834,9 +1421,23 @@ def _extract_translation_from_explanation(content: Iterable[Dict]) -> Tuple[List
             if style == "italic":
                 cleaned_note = _clean_spacing(raw_text.replace("_", " "))
                 cleaned_note = cleaned_note.strip("()")
+                if cleaned_note and _attach_to_previous(cleaned_note):
+                    continue
                 if cleaned_note:
                     notes.append(cleaned_note)
                 continue
+            if pending_parenthesis_close:
+                stripped = raw_text.lstrip()
+                leading_ws_len = len(raw_text) - len(stripped)
+                leading_ws = raw_text[:leading_ws_len]
+                if stripped.startswith(")"):
+                    normalized = leading_ws + stripped
+                elif stripped:
+                    normalized = f"{leading_ws}) {stripped}"
+                else:
+                    normalized = f"{leading_ws})"
+                raw_text = normalized
+                pending_parenthesis_close = False
             translation_nodes.append(
                 {
                     "type": "text",
@@ -860,6 +1461,12 @@ def _extract_translation_from_explanation(content: Iterable[Dict]) -> Tuple[List
             if note_text:
                 notes.append(note_text)
 
+    if pending_parenthesis_close and translation_nodes:
+        last = translation_nodes[-1]
+        if last.get("type") == "text" and last.get("style") == "regular":
+            last_text = last.get("text", "")
+            if last_text and not last_text.rstrip().endswith(")"):
+                last["text"] = f"{last_text.rstrip()})"
     translation_nodes = _normalize_labelled_content(translation_nodes)
     cleaned_nodes: List[Dict] = []
     for item in translation_nodes:
@@ -867,11 +1474,31 @@ def _extract_translation_from_explanation(content: Iterable[Dict]) -> Tuple[List
             text = _clean_spacing(item.get("text", ""))
             if not text:
                 continue
+            if text and text[0] in {";", ",", ":"}:
+                text = text[1:].lstrip()
             new_item = dict(item)
             new_item["text"] = text
             cleaned_nodes.append(new_item)
         else:
             cleaned_nodes.append(item)
+
+    substantive = False
+    for node in cleaned_nodes:
+        if node.get("type") == "text":
+            payload = node.get("text", "")
+            if payload and not payload.lstrip().startswith("="):
+                substantive = True
+                break
+
+    if not substantive and cleaned_nodes:
+        for node in cleaned_nodes:
+            if node.get("type") == "text":
+                text = node.get("text", "").lstrip()
+                if text.startswith("="):
+                    text = text.lstrip("= ")
+                if text:
+                    notes.append(text)
+        cleaned_nodes = []
 
     return cleaned_nodes, notes
 
@@ -979,6 +1606,26 @@ def _deduplicate(items: Iterable[str]) -> List[str]:
     return result
 
 
+def _has_unclosed_parenthesis(value: str) -> bool:
+    if not value:
+        return False
+    return value.count("(") > value.count(")")
+
+
+def _trim_trailing_parenthesis(nodes: List[Dict]) -> None:
+    if not nodes:
+        return
+    for node in reversed(nodes):
+        if node.get("type") != "text":
+            continue
+        text = node.get("text", "") or ""
+        if _has_unclosed_parenthesis(text) and "(" in text:
+            pivot = text.rfind("(")
+            trimmed = text[:pivot].rstrip()
+            node["text"] = trimmed
+            break
+
+
 def _is_pos_marker(items: Sequence[str]) -> bool:
     return bool(items) and all(item.startswith("{") and item.endswith("}") for item in items)
 
@@ -1010,7 +1657,7 @@ def _first_token(text: str) -> str:
 
 def _looks_like_verb(text: str) -> bool:
     stripped = _strip_accents(text).lower()
-    endings = ("ться", "сть", "сти", "чь", "ть", "ти")
+    endings = ("ться", "сь", "ст", "сть", "сти", "ть", "ти", "чь", "ся")
     return any(stripped.endswith(ending) for ending in endings)
 
 
@@ -1038,6 +1685,47 @@ def _looks_like_adjective(text: str) -> bool:
         "истый",
     )
     return any(stripped.endswith(ending) for ending in endings)
+
+
+_PREPOSITION_PREFIXES = {
+    "в",
+    "во",
+    "из",
+    "изо",
+    "к",
+    "ко",
+    "по",
+    "на",
+    "за",
+    "о",
+    "об",
+    "обо",
+    "при",
+    "под",
+    "подо",
+    "над",
+    "надо",
+    "с",
+    "со",
+    "от",
+    "до",
+    "для",
+    "у",
+    "между",
+    "перед",
+    "через",
+    "из-за",
+    "около",
+    "про",
+    "внутри",
+    "вне",
+}
+
+
+def _is_preposition_prefix(token: str) -> bool:
+    if not token:
+        return False
+    return token in _PREPOSITION_PREFIXES
 
 
 def _expand_cross_product(items: List[str]) -> List[str]:
@@ -1093,31 +1781,26 @@ def _expand_suffix_appending(items: List[str]) -> List[str]:
         tokens = candidate.split()
         if len(tokens) < 2:
             continue
-        for suffix_len in range(1, min(3, len(tokens))):
+        for suffix_len in range(1, len(tokens)):
             prefix_tokens = tokens[:-suffix_len]
             suffix_tokens = tokens[-suffix_len:]
             if len(prefix_tokens) != 1:
                 continue
+            if len(suffix_tokens) < 2:
+                continue
             base_word = prefix_tokens[0]
-            suffix_text = " ".join(suffix_tokens)
+            first_suffix_token = _strip_accents(suffix_tokens[0]).lower()
+            if not _is_preposition_prefix(first_suffix_token):
+                continue
+            suffix_text = _clean_spacing(" ".join(suffix_tokens))
 
-            if _looks_like_verb(base_word):
-                verb_candidates = [
-                    item
-                    for item in singles
-                    if _looks_like_verb(_first_token(item))
-                ]
-                if verb_candidates:
-                    for verb in verb_candidates:
-                        extra_items.append(_clean_spacing(f"{verb} {suffix_text}"))
-            elif _looks_like_adjective(base_word):
+            if _looks_like_adjective(base_word):
                 adjective_candidates = [
                     item
                     for item in singles
                     if _looks_like_adjective(_first_token(item))
                 ]
                 if adjective_candidates:
-                    last_token = suffix_tokens[-1]
                     if len(adjective_candidates) >= 1:
                         for adjective in adjective_candidates:
                             extra_items.append(
@@ -1176,7 +1859,7 @@ def _first_token(text: str) -> str:
 
 def _looks_like_verb(text: str) -> bool:
     stripped = _strip_accents(text).lower()
-    endings = ("ться", "сь", "ст", "ть", "ти", "чь")
+    endings = ("ться", "сь", "ст", "сть", "сти", "ть", "ти", "чь", "ся")
     return any(stripped.endswith(ending) for ending in endings)
 
 
@@ -1184,11 +1867,66 @@ def _strip_trailing_punctuation(value: str) -> str:
     return value.rstrip(" ,.;:)")
 
 
+def _looks_like_participle(text: str) -> bool:
+    stripped = _strip_accents(text).lower()
+    endings = (
+        "щий",
+        "щая",
+        "щее",
+        "щие",
+        "щийся",
+        "щаяся",
+        "щееся",
+        "щиеся",
+        "ющий",
+        "ющая",
+        "ющее",
+        "ющие",
+        "ющийся",
+        "ющаяся",
+        "ющееся",
+        "ющиеся",
+        "имый",
+        "имая",
+        "имое",
+        "имые",
+        "омый",
+        "омая",
+        "омое",
+        "омые",
+    )
+    return any(stripped.endswith(ending) for ending in endings)
+
+
 def _is_meaningful_item(value: str) -> bool:
     if not value:
         return False
     stripped = value.strip()
     return stripped not in {",", ";", ".", ")", "("}
+
+
+_OPTIONAL_PREFIX_SPACE_RE = re.compile(r"\(([^)]+)\)\s+([^\s,;:.()]+)")
+
+
+def _compress_optional_prefix_spacing(value: str) -> str:
+    def _should_collapse(candidate: str) -> bool:
+        if not candidate:
+            return False
+        normalized = _strip_accents(candidate).lower()
+        if any(char in candidate for char in " ,.;:/"):
+            return False
+        if len(normalized) > 4:
+            return False
+        return True
+
+    def _replace(match: re.Match[str]) -> str:
+        inside = match.group(1).strip()
+        tail = match.group(2)
+        if not _should_collapse(inside):
+            return match.group(0)
+        return f"({inside}){tail}"
+
+    return _OPTIONAL_PREFIX_SPACE_RE.sub(_replace, value)
 
 
 def _expand_inline_dividers(nodes: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
@@ -1202,12 +1940,17 @@ def _expand_inline_dividers(nodes: List[Dict[str, Any]]) -> List[Dict[str, Any]]
                     trimmed = part.strip()
                     if trimmed:
                         new_node = dict(node)
-                        new_node["text"] = trimmed
+                        new_node["text"] = _compress_optional_prefix_spacing(trimmed)
                         result.append(new_node)
                     if idx != len(parts) - 1:
                         result.append({"type": "divider", "text": ";", "kind": "far_divider"})
                 continue
-        result.append(node)
+        if node.get("type") == "text":
+            adjusted = dict(node)
+            adjusted["text"] = _compress_optional_prefix_spacing(node.get("text") or "")
+            result.append(adjusted)
+        else:
+            result.append(node)
     return result
 
 
@@ -1255,20 +1998,37 @@ _SPACES_RE = re.compile(r"\s+")
 def _clean_spacing(value: str) -> str:
     collapsed = _SPACES_RE.sub(" ", value or "")
     collapsed = collapsed.replace(" ,", ",").replace(" .", ".")
-    return collapsed.strip(" ;,")
+    return collapsed.strip(" ,")
 
 
-def collect_translation_phrases(review: TranslationReview) -> List[str]:
+def collect_translation_phrases(
+    review: TranslationReview,
+    manual_phrases: Optional[Sequence[str]] = None,
+) -> List[str]:
     phrases: List[str] = []
     for group in review.groups:
         phrases.extend(group.items)
+    for item in manual_phrases or []:
+        cleaned = _clean_spacing(item)
+        if cleaned and cleaned not in phrases:
+            phrases.append(cleaned)
     return phrases
 def _normalize_labelled_content(nodes: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     result: List[Dict[str, Any]] = []
     for node in nodes:
         if node.get("type") == "label":
-            candidates = node.get("text", "").strip().rstrip(".").lower()
-            if candidates in _IGNORABLE_LABELS:
+            raw_label = node.get("text", "")
+            normalized_label = _normalize_label_text(raw_label)
+            if normalized_label in _IGNORABLE_LABELS:
                 continue
         result.append(node)
     return result
+
+
+def _normalize_label_text(value: str) -> str:
+    if not value:
+        return ""
+    cleaned = value.strip().rstrip(".")
+    cleaned = cleaned.replace("_", " ")
+    cleaned = _clean_spacing(cleaned)
+    return cleaned.lower()
