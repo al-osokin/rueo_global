@@ -1433,6 +1433,10 @@ def parse_illustration(text: str, preserve_punctuation: bool = False) -> Dict:
         eo_part = text[:ru_start].strip()
         ru_part = text[ru_start:].strip()
 
+        if eo_part and not any('A' <= c <= 'Z' or 'a' <= c <= 'z' or '\u00C0' <= c <= '\u024F' for c in eo_part):
+            ru_part = (eo_part + ru_part).strip()
+            eo_part = ""
+
         if eo_part and ru_part and not eo_part.endswith('-'):
             result['eo'] = eo_part
             ru_parts = parse_rich_text(ru_part, preserve_punctuation=False)
@@ -1442,6 +1446,10 @@ def parse_illustration(text: str, preserve_punctuation: bool = False) -> Dict:
             if 'near_divider' in divider_kinds and 'far_divider' in divider_kinds:
                 result['ru_requires_review'] = True
             result.pop('content', None)
+    else:
+        ru_part = text.strip()
+
+    result.setdefault('meta', {})['ru_text'] = ru_part
 
     return result
 

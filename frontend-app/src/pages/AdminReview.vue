@@ -149,7 +149,7 @@
             <div class="text-caption text-grey-7">
               Шаблон: {{ article.template || '—' }} · Статус: {{ article.parsing_status }}
             </div>
-            <div class="q-mt-sm">
+            <div class="row q-gutter-sm q-mt-sm">
               <q-btn
                 color="warning"
                 outline
@@ -158,6 +158,15 @@
                 :loading="resetting"
                 :disable="resetting"
                 @click="resetArticle"
+              />
+              <q-btn
+                color="primary"
+                outline
+                size="sm"
+                label="Переразобрать открытую"
+                :loading="reparseCurrentLoading"
+                :disable="reparseCurrentLoading"
+                @click="reparseCurrentArticle"
               />
             </div>
           </q-card-section>
@@ -308,6 +317,7 @@ const historyIndex = ref(-1);
 const showPendingOnly = ref(true);
 const includePending = ref(false);
 const reparseLoading = ref(false);
+const reparseCurrentLoading = ref(false);
 
 const canGoBack = computed(() => historyIndex.value > 0);
 
@@ -603,6 +613,41 @@ const reparseArticles = async () => {
     $q.notify({ type: "negative", message: "Не удалось запустить переразбор" });
   } finally {
     reparseLoading.value = false;
+  }
+};
+
+const reparseCurrentArticle = async () => {
+  if (!article.value || reparseCurrentLoading.value) {
+    return;
+  }
+  reparseCurrentLoading.value = true;
+  try {
+    const { data } = await api.post(
+      `/admin/articles/${lang.value}/${article.value.art_id}/reparse`
+    );
+    if (data?.article) {
+      article.value = data.article;
+      prepareGroups(data.article);
+      comment.value = "";
+      updateHistory(data.article.art_id, { fromHistory: true });
+      if (data.parse_error) {
+        $q.notify({
+          type: "warning",
+          message: `Переразбор завершился с ошибкой: ${data.parse_error}`,
+        });
+      } else {
+        $q.notify({ type: "positive", message: "Статья переразобрана" });
+      }
+    } else {
+      $q.notify({ type: "negative", message: "Не удалось получить данные статьи" });
+    }
+  } catch (err) {
+    console.error(err);
+    const detail = err?.response?.data?.detail;
+    $q.notify({ type: "negative", message: detail || "Не удалось переразобрать статью" });
+  } finally {
+    reparseCurrentLoading.value = false;
+    await loadStats();
   }
 };
 

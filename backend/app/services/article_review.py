@@ -1,13 +1,13 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any, Dict, List, Optional, Sequence
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from sqlalchemy import select, text, func
 from sqlalchemy.orm import Session
 
 from app.models import Article, ArticleParseNote, ArticleParseState, ArticleRu
-from app.services.article_parser import ArticleParserService
+from app.services.article_parser import ArticleParserService, ArticleParseResult
 from app.services.translation_review import (
     apply_candidate_selection,
     build_translation_review,
@@ -251,6 +251,32 @@ class ArticleReviewService:
         self.session.commit()
         return self.load_article(lang, art_id)
 
+    def _collect_reparse_ids(
+        self,
+        lang: str,
+        *,
+        art_ids: Optional[Sequence[int]] = None,
+        include_pending: bool = False,
+    ) -> List[int]:
+        if art_ids:
+            return sorted(
+                {
+                    int(item)
+                    for item in art_ids
+                    if isinstance(item, int) or (isinstance(item, str) and item.isdigit())
+                }
+            )
+
+        status_filter = ["needs_review"]
+        if include_pending:
+            status_filter.append("pending")
+        rows = self.session.execute(
+            select(ArticleParseState.art_id)
+            .where(ArticleParseState.lang == lang)
+            .where(ArticleParseState.parsing_status.in_(status_filter))
+        ).scalars()
+        return sorted(set(rows))
+
     def reparse_articles(
         self,
         lang: str,
@@ -258,18 +284,11 @@ class ArticleReviewService:
         art_ids: Optional[Sequence[int]] = None,
         include_pending: bool = False,
     ) -> Dict[str, Any]:
-        if art_ids:
-            ids = sorted(set(int(x) for x in art_ids if isinstance(x, int) or str(x).isdigit()))
-        else:
-            status_filter = ["needs_review"]
-            if include_pending:
-                status_filter.append("pending")
-            rows = self.session.execute(
-                select(ArticleParseState.art_id)
-                .where(ArticleParseState.lang == lang)
-                .where(ArticleParseState.parsing_status.in_(status_filter))
-            ).scalars()
-            ids = sorted(set(rows))
+        ids = self._collect_reparse_ids(
+            lang,
+            art_ids=art_ids,
+            include_pending=include_pending,
+        )
 
         summary = {"requested": len(ids), "processed": 0, "failed": [], "skipped": 0}
 
@@ -299,6 +318,18 @@ class ArticleReviewService:
         summary["processed"] = updated + len(failed)
         summary["failed"] = failed
         return {"summary": summary, "updated": updated, "failed_details": pipeline_errors}
+
+    def reparse_article(
+        self,
+        lang: str,
+        art_id: int,
+    ) -> Tuple[Dict[str, Any], ArticleParseResult]:
+        self._ensure_state(lang, art_id)
+        result = self.parser.parse_article_by_id(lang, art_id, include_raw=True)
+        self.parser.store_result(result, replace_payload=True)
+        self.session.commit()
+        payload = self.load_article(lang, art_id)
+        return payload, result
 
     def _ensure_state(self, lang: str, art_id: int) -> ArticleParseState:
         state = self.session.execute(

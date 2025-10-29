@@ -99,7 +99,7 @@ def build_translation_review(parsed_article: Dict) -> TranslationReview:
     article_sections = _get_article_sections(lang, art_id) if lang and art_id else None
     groups, notes = _collect_groups_from_blocks(
         parsed_article.get("body") or [],
-        section=None,
+        section=headword,
         article_sections=article_sections,
     )
     return TranslationReview(headword=headword, groups=groups, notes=notes)
@@ -317,6 +317,19 @@ def _collect_groups_from_blocks(
 
     for block in blocks or []:
         block_type = block.get("type")
+
+        if block_type == "illustration" and (not block.get("eo") or not _has_letters(block.get("eo"))):
+            ru_segments = block.get("ru_segments")
+            if ru_segments:
+                converted = _ru_segments_to_content(ru_segments)
+                if converted:
+                    transformed = dict(block)
+                    transformed.pop("ru_segments", None)
+                    transformed.pop("eo", None)
+                    transformed["type"] = "translation"
+                    transformed["content"] = converted
+                    block = transformed
+                    block_type = "translation"
 
         if block_type == "headword":
             _flush_buffer()
@@ -766,6 +779,7 @@ def _sanitize_spec_values(values: Optional[Iterable[str]]) -> Tuple[List[str], L
         cleaned_value = _clean_spacing((raw or "").replace("_", " "))
         if not cleaned_value:
             continue
+        cleaned_value = _normalize_optional_prefix_spacing(cleaned_value)
         stripped_value, note = _separate_trailing_note(cleaned_value)
         if stripped_value:
             stripped_value, placeholder_note = _strip_note_placeholder(stripped_value)
@@ -784,6 +798,11 @@ _NOTE_PLACEHOLDER_RE = re.compile(
     r"(?:\b[а-яё`]+(?:\s+[а-яё`]+)?-л\.?)$", re.IGNORECASE
 )
 
+_OPTIONAL_PREFIX_RE = re.compile(
+    r"(\S)\(([^)]+)\)\s+([^\s,;:.])",
+    re.UNICODE,
+)
+
 
 def _strip_note_placeholder(value: str) -> Tuple[str, Optional[str]]:
     match = _NOTE_PLACEHOLDER_RE.search(value)
@@ -792,6 +811,21 @@ def _strip_note_placeholder(value: str) -> Tuple[str, Optional[str]]:
     note = match.group(0)
     cleaned = _clean_spacing(value[: match.start()])
     return cleaned, _normalize_note_text(note.replace("-л", "-л.").rstrip("."))
+
+
+def _normalize_optional_prefix_spacing(value: str) -> str:
+    def _replacer(match: re.Match[str]) -> str:
+        before, inside, after = match.groups()
+        return f"{before} ({inside}){after}"
+
+    return _OPTIONAL_PREFIX_RE.sub(_replacer, value)
+
+
+def _strip_leading_markers(value: str) -> str:
+    cleaned = re.sub(r"^\*\s*", "", value)
+    cleaned = re.sub(r"^\{[^}]+\}\s*", "", cleaned)
+    cleaned = re.sub(r"^\d+\.\s*", "", cleaned)
+    return cleaned
 
 
 _INLINE_CLAUSE_PREFIXES = {
@@ -921,28 +955,70 @@ def _apply_source_fallback(
         return specs, extra_notes
     # Concatenate lines preserving original separators
     source_text = " ".join(line.strip() for line in section_lines if line.strip())
-    if not source_text or ";" not in source_text:
+    if not source_text:
         return specs, extra_notes
 
-    raw_parts = [part.strip() for part in source_text.split(";") if part.strip()]
+    raw_parts = _split_source_segments(source_text)
     if len(raw_parts) <= 1:
         return specs, extra_notes
 
     cleaned_parts: List[Tuple[str, Optional[str]]] = []
     tokenized_parts: List[List[str]] = []
+    reference_notes_buffer: List[str] = []
     for part in raw_parts:
         cleaned = _clean_spacing(part.replace("_", " "))
+        cleaned = _strip_leading_markers(cleaned)
+        leading_note_match = re.match(r"\(([^)]+)\)\s*", cleaned)
+        if leading_note_match:
+            cleaned = cleaned[leading_note_match.end():]
+        cleaned, reference_notes = _remove_reference_suffix(cleaned)
         note_match = re.search(r"\(([^)]+)\)\.?$", cleaned)
         note_value: Optional[str] = None
         if note_match:
             note_value = _normalize_note_text(note_match.group(1))
             cleaned = _clean_spacing(cleaned[: note_match.start()])
+        for reference_note in reference_notes:
+            if reference_note and reference_note not in reference_notes_buffer:
+                reference_notes_buffer.append(reference_note)
         cleaned_parts.append((cleaned, note_value))
         tokenized_parts.append(_fallback_tokenize(cleaned))
 
     source_idx = 0
     updated_specs: List[Dict[str, List[str]]] = []
     collected_notes = list(extra_notes)
+    for note in reference_notes_buffer:
+        if note not in collected_notes:
+            collected_notes.append(note)
+
+    if (
+        len(specs) == 1
+        and any("(" in part for part in raw_parts)
+        and any(
+            " " not in _clean_spacing(item)
+            for item in (specs[0].get("base") or specs[0].get("expanded") or [])
+        )
+    ):
+        spec = specs[0]
+        expanded_variants: List[str] = []
+        for cleaned_text, note in cleaned_parts:
+            variants = _expand_parenthetical_forms(cleaned_text)
+            if variants:
+                expanded_variants.extend(variants)
+            else:
+                expanded_variants.append(cleaned_text)
+            if note and note not in collected_notes:
+                collected_notes.append(note)
+        expanded_variants = _deduplicate([
+            _strip_trailing_punctuation(_clean_spacing(item))
+            for item in expanded_variants
+            if _clean_spacing(item)
+        ])
+        if expanded_variants:
+            spec["base"] = expanded_variants
+            spec["expanded"] = expanded_variants
+            spec["auto_generated"] = True
+        updated_specs.append(spec)
+        return updated_specs, collected_notes
 
     for spec in specs:
         candidate_items = spec.get("base") or spec.get("expanded") or []
@@ -988,15 +1064,30 @@ def _apply_source_fallback(
                 break
 
         if not matched or not accum_texts:
-            source_idx = start_idx
+            if start_idx < len(cleaned_parts):
+                source_idx = start_idx + 1
+                candidate_text, candidate_note = cleaned_parts[start_idx]
+                final_list = _expand_source_variants(candidate_text)
+                if final_list:
+                    spec["base"] = final_list
+                    spec["expanded"] = final_list
+                    spec["auto_generated"] = True
+                if candidate_note and candidate_note not in collected_notes:
+                    collected_notes.append(candidate_note)
+            updated_specs.append(spec)
+            continue
         else:
             cleaned_list = [
                 text for text in (_clean_spacing(item) for item in accum_texts) if text
             ]
             cleaned_list = _deduplicate(cleaned_list)
             if cleaned_list:
-                spec["base"] = cleaned_list
-                spec["expanded"] = cleaned_list
+                expanded_variants: List[str] = []
+                for value in cleaned_list:
+                    expanded_variants.extend(_expand_source_variants(value))
+                final_list = expanded_variants or cleaned_list
+                spec["base"] = final_list
+                spec["expanded"] = final_list
                 spec["auto_generated"] = True
             for note in accum_notes:
                 if note:
@@ -1005,7 +1096,81 @@ def _apply_source_fallback(
                         collected_notes.append(normalized_note)
         updated_specs.append(spec)
 
+    for idx in range(source_idx, len(cleaned_parts)):
+        remaining_text, remaining_note = cleaned_parts[idx]
+        final_list = _expand_source_variants(remaining_text)
+        if not final_list:
+            continue
+        new_spec = {
+            "base": final_list,
+            "expanded": final_list,
+            "auto_generated": True,
+        }
+        updated_specs.append(new_spec)
+        if remaining_note and remaining_note not in collected_notes:
+            collected_notes.append(remaining_note)
+
     return updated_specs, collected_notes
+
+
+def _split_source_segments(text: str) -> List[str]:
+    segments: List[str] = []
+    current: List[str] = []
+    depth = 0
+    for char in text:
+        if char == '(':
+            depth += 1
+        elif char == ')':
+            depth = max(0, depth - 1)
+        if (char == ';' or char == '\n') and depth == 0:
+            part = ''.join(current).strip()
+            if part:
+                segments.append(part)
+            current = []
+            continue
+        current.append(char)
+    tail = ''.join(current).strip()
+    if tail:
+        segments.append(tail)
+    return segments
+
+
+def _remove_reference_suffix(value: str) -> Tuple[str, List[str]]:
+    notes: List[str] = []
+
+    def _replace(match: re.Match[str]) -> str:
+        mode = match.group(1).lower()
+        target = match.group(2).strip()
+        label = "ср." if mode.startswith("ср") else "см."
+        note_text = _clean_spacing(f"{label} {target}")
+        if note_text and note_text not in notes:
+            notes.append(note_text)
+        return ""
+
+    cleaned = re.sub(r"(ср|см)\.?\s*<([^>]+)>", _replace, value, flags=re.IGNORECASE)
+
+    def _replace_plain(match: re.Match[str]) -> str:
+        mode = match.group(1).lower()
+        target = match.group(2).strip()
+        label = "ср." if mode.startswith("ср") else "см."
+        note_text = _clean_spacing(f"{label} {target}")
+        if note_text and note_text not in notes:
+            notes.append(note_text)
+        return ""
+
+    cleaned = re.sub(r"(ср|см)\.?\s+([A-Za-z0-9`´'’_-]+)", _replace_plain, cleaned, flags=re.IGNORECASE)
+    return cleaned.strip(" ,;"), notes
+
+
+def _expand_source_variants(text: str) -> List[str]:
+    variants: List[str] = []
+    for option in _expand_parenthetical_forms(text):
+        variants.extend(_expand_inline_synonyms_list([option]))
+    return _deduplicate([
+        _strip_trailing_punctuation(_clean_spacing(item))
+        for item in variants
+        if _clean_spacing(item)
+    ])
 
 
 def _merge_adjacent_text_nodes(nodes: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
@@ -1024,6 +1189,12 @@ def _merge_adjacent_text_nodes(nodes: List[Dict[str, Any]]) -> List[Dict[str, An
             continue
         merged.append(node)
     return merged
+
+
+def _has_letters(value: Optional[str]) -> bool:
+    if not value:
+        return False
+    return any(char.isalpha() for char in value)
 
 
 def _merge_proverb_like_segments(nodes: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
@@ -1561,12 +1732,49 @@ def _expand_parenthetical_forms(phrase: str) -> List[str]:
                     variants.extend(_recurse(new_text))
                 return variants
 
-        if " " not in inside_clean:
-            without = before + after
-            with_opt = before + inside_clean + after
+        if " " not in inside_clean and "," not in inside_clean:
+            before_trimmed = before.rstrip()
+            after_trimmed = after.lstrip()
+
+            needs_space_between = (
+                bool(before_trimmed)
+                and bool(after_trimmed)
+                and not before_trimmed.endswith((" ", "-", "—", "‑", "/"))
+                and not after_trimmed.startswith((",", ";", ":", ".", ")", "—", "-", "‑"))
+            )
+
+            if needs_space_between:
+                without = f"{before_trimmed} {after_trimmed}"
+            else:
+                without = before_trimmed + after_trimmed
+
+            after_without_space = after
+            had_leading_space = False
+            if after and after[0].isspace():
+                after_without_space = after.lstrip()
+                had_leading_space = True
+            insert_space = (
+                had_leading_space
+                and bool(after_without_space)
+                and not after_without_space.startswith((",", ";", ":", ".", ")", "—", "-", "‑"))
+            )
+            with_opt = before + inside_clean + (" " if insert_space else "") + after_without_space
             return _recurse(without) + _recurse(with_opt)
 
-        return _recurse(before + " " + inside_clean + after)
+        preserved_before = before
+        if preserved_before and not preserved_before.endswith((" ", "-", "—", "‑", "/")):
+            preserved_before += " "
+        preserved_after = after
+        if preserved_after and preserved_after[0].isspace():
+            preserved_after = preserved_after.lstrip()
+            joiner = " "
+        else:
+            joiner = "" if not preserved_after or preserved_after.startswith(
+                (",", ";", ":", ".", ")", "—", "-", "‑")
+            ) else " "
+
+        preserved = f"{preserved_before}({inside_clean}){joiner}{preserved_after or ''}"
+        return _recurse(preserved)
 
     return _deduplicate([_clean_spacing(item) for item in _recurse(phrase)])
 

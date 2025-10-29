@@ -827,20 +827,60 @@ def _adjust_parenthetical_reference(parent: Dict[str, Any], reference: Dict[str,
         if open_parenthesis:
             break
 
-    if not open_parenthesis:
+    text_value = reference.get("text", "")
+    if open_parenthesis:
+        if text_value.startswith("(="):
+            text_value = text_value[2:].lstrip()
+        if text_value:
+            if not text_value.startswith("="):
+                text_value = "= " + text_value
+        else:
+            text_value = "="
+        if not text_value.endswith(")"):
+            text_value = text_value.rstrip() + ")"
+        reference["text"] = " " + text_value.lstrip()
+    else:
+        if text_value and not text_value.startswith(" "):
+            reference["text"] = " " + text_value.lstrip()
+
+    content_nodes = parent.get("content") or []
+    trailing_text_node = None
+    for node in reversed(content_nodes):
+        if node.get("type") == "text":
+            trailing_text_node = node
+            break
+    if not trailing_text_node:
         return
 
-    text_value = reference.get("text", "")
-    if text_value.startswith("(="):
-        text_value = text_value[2:].lstrip()
-    if text_value:
-        if not text_value.startswith("="):
-            text_value = "= " + text_value
+    text_payload = trailing_text_node.get("text", "") or ""
+    match = re.search(r"\s*([A-Za-z0-9`´'’]+)\)\s*$", text_payload)
+    if not match:
+        return
+
+    suffix = match.group(1)
+    if not suffix:
+        return
+
+    had_trailing_paren = text_payload.rstrip().endswith(")")
+    new_text = text_payload[: match.start()].rstrip()
+    trailing_text_node["text"] = new_text
+
+    targets = reference.get("targets") or []
+    if targets:
+        new_target = f"{targets[-1]}{suffix}"
+        if had_trailing_paren:
+            new_target += ")"
+        targets[-1] = new_target
+    if reference["text"].endswith(")"):
+        updated_text = reference["text"][:-1] + suffix
+        if had_trailing_paren:
+            updated_text += ")"
+        reference["text"] = updated_text
     else:
-        text_value = "="
-    if not text_value.endswith(")"):
-        text_value = text_value.rstrip() + ")"
-    reference["text"] = " " + text_value.lstrip()
+        updated_text = reference["text"] + suffix
+        if had_trailing_paren:
+            updated_text += ")"
+        reference["text"] = updated_text
 
 
 def _reorder_keys(block: Dict[str, Any]) -> Dict[str, Any]:
@@ -1083,9 +1123,9 @@ def _merge_plain_russian_illustrations(body: List[Dict[str, Any]]) -> List[Dict[
     for block in body:
         if isinstance(block, dict) and block.get("children"):
             block["children"] = _merge_plain_russian_illustrations(block.get("children", []))
-        if block.get("type") == "illustration" and not block.get("eo"):
+        if block.get("type") == "illustration" and (not block.get("eo") or not _has_letters(block.get("eo"))):
             content = block.get("content", []) or []
-            if content and all(item.get("type") in {"text", "divider", "note"} for item in content):
+            if content and all(item.get("type") in {"text", "divider", "note", "link"} for item in content):
                 if content:
                     target_translation = result[-1] if result and result[-1].get("type") == "translation" else None
                     if not target_translation:
@@ -1093,10 +1133,19 @@ def _merge_plain_russian_illustrations(body: List[Dict[str, Any]]) -> List[Dict[
                         result.append(target_translation)
 
                     trailing_sentence = False
+                    reference_mode: Optional[str] = None
+                    reference_targets: List[str] = []
+                    reference_text: Optional[str] = None
                     for item in content:
                         if item.get("type") == "text":
                             text_value = (item.get("text", "") or "").strip()
                             if text_value:
+                                if item.get("style") == "italic":
+                                    normalized = text_value.strip().rstrip('.').lower()
+                                    if normalized in {"см", "ср"}:
+                                        reference_mode = "compare" if normalized.startswith("ср") else "see"
+                                        reference_text = text_value
+                                        continue
                                 content_list = target_translation.setdefault("content", [])
                                 if content_list:
                                     last_item = content_list[-1]
@@ -1154,6 +1203,11 @@ def _merge_plain_russian_illustrations(body: List[Dict[str, Any]]) -> List[Dict[
                                     "style": "italic",
                                     "text": display_text,
                                 })
+                        elif item.get("type") == "link":
+                            target_value = (item.get("target") or item.get("text") or "").strip()
+                            if target_value:
+                                reference_targets.append(target_value)
+                            continue
 
                     has_near, has_far = _detect_mixed_dividers(target_translation.get("content", []))
                     if has_near and has_far:
@@ -1172,6 +1226,16 @@ def _merge_plain_russian_illustrations(body: List[Dict[str, Any]]) -> List[Dict[
                                 "style": "regular",
                                 "text": raw_ru_text,
                             }]
+
+                    if reference_targets:
+                        reference_block: Dict[str, Any] = {
+                            "type": "reference",
+                            "mode": reference_mode or "see",
+                            "targets": reference_targets,
+                        }
+                        if reference_text:
+                            reference_block["text"] = reference_text
+                        target_translation.setdefault("children", []).append(reference_block)
 
                     if trailing_sentence:
                         result.append({"type": "sentence_divider", "text": '.'})
@@ -1193,6 +1257,12 @@ def _extract_plain_note_text(node: Dict[str, Any]) -> str:
         raw_text = node.get("text", "")
     cleaned = " ".join(raw_text.replace("_", " ").split())
     return cleaned.strip()
+
+
+def _has_letters(value: Optional[str]) -> bool:
+    if not value:
+        return False
+    return any(char.isalpha() for char in value)
 
 
 def _cleanup_tilde_context(article: Dict[str, Any]) -> None:

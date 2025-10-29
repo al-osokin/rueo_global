@@ -88,6 +88,11 @@ class ReparseResponse(BaseModel):
     updated: int
     failed_details: List[Dict[str, Any]]
 
+
+class ArticleReparseResponse(BaseModel):
+    article: ArticleReviewPayload
+    parse_error: Optional[str] = None
+
 _state_lock = threading.Lock()
 _state = {
     "running": False,
@@ -232,6 +237,22 @@ def get_article_stats(lang: str, session=Depends(get_session)):
     return ArticleStats(**stats)
 
 
+@router.post("/articles/{lang}/reparse", response_model=ReparseResponse)
+def reparse_article_batch(
+    lang: str,
+    payload: ReparseRequest,
+    session=Depends(get_session),
+):
+    _ensure_lang(lang)
+    service = ArticleReviewService(session)
+    result = service.reparse_articles(
+        lang,
+        art_ids=payload.art_ids,
+        include_pending=payload.include_pending,
+    )
+    return ReparseResponse(**result)
+
+
 @router.get("/articles/{lang}/{art_id}", response_model=ArticleReviewPayload)
 def get_article_review(lang: str, art_id: int, session=Depends(get_session)):
     _ensure_lang(lang)
@@ -269,17 +290,17 @@ def reset_article_review(
     return service.reset_article(lang, art_id)
 
 
-@router.post("/articles/{lang}/reparse", response_model=ReparseResponse)
-def reparse_article_batch(
+@router.post("/articles/{lang}/{art_id}/reparse", response_model=ArticleReparseResponse)
+def reparse_single_article(
     lang: str,
-    payload: ReparseRequest,
+    art_id: int,
     session=Depends(get_session),
 ):
     _ensure_lang(lang)
     service = ArticleReviewService(session)
-    result = service.reparse_articles(
-        lang,
-        art_ids=payload.art_ids,
-        include_pending=payload.include_pending,
+    payload, result = service.reparse_article(lang, art_id)
+    response = ArticleReparseResponse(
+        article=ArticleReviewPayload(**payload),
+        parse_error=result.error if not result.success else None,
     )
-    return ReparseResponse(**result)
+    return response
