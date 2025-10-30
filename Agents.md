@@ -409,6 +409,54 @@ If the same translation appears in content of numbered value 1 and numbered valu
 - Proper semantic tagging in final JSON output
 - Synonym relationship tracking per meaning
 
+## Recent fixes: Abbreviations and punctuation handling (30.10.25 - continued)
+
+### Problem
+After fixing numbered translation handling, article 383 revealed punctuation issues:
+1. Abbreviations like "что-л." were broken: "делать что-л. неестественно" became "аффектировать | неестественно" (lost "делать что-л.")
+2. Exclamation marks had extra space: "не ломайся!" appeared as "не ломайся !"
+
+### Root cause
+In `_split_translation_groups()`, divider nodes with `.` triggered `_flush_builder()`, splitting phrases:
+```python
+elif symbol == ".":
+    _flush_builder()  # This broke abbreviations!
+```
+
+When parser encountered "д`елать что-л.", it split into:
+- TEXT: "д`елать что-л" (without period)
+- DIVIDER: "." (separate node)
+
+The flush caused "д`елать что-л" and "неест`ественно" to become separate phrases.
+
+### Solution
+Added `append_punctuation()` method to `_PhraseBuilder` that attaches punctuation directly to the last component:
+```python
+def append_punctuation(self, punct: str) -> None:
+    """Присоединяет знак пунктуации к последнему компоненту (для сокращений типа 'что-л.')"""
+    if not self.components or not punct:
+        return
+    last_options = self.components[-1]
+    if last_options:
+        for i in range(len(last_options)):
+            last_options[i] = last_options[i].rstrip() + punct
+```
+
+Updated divider handling to attach `.`, `!`, `?` instead of flushing:
+```python
+elif symbol in (".", "!", "?"):
+    # Знаки конца предложения/восклицания присоединяем к предыдущему слову
+    builder.append_punctuation(symbol)
+```
+
+### Results
+- **Article 383, value 1:** Now correctly parses as "аффект`ировать | д`елать что-л. неест`ественно"
+- **Example "ne ~u!":** Now correctly shows as "не лом`айся!" (no extra space)
+- **No regressions:** Articles 270 (25 groups), 365 (4 groups) unchanged
+
+### Key insight
+Period in Russian translations is almost always part of abbreviations (что-л., т.е., т.п.), not a phrase separator. Only `,` and `;` should trigger phrase boundaries.
+
 ## Quick reference: test article 270
 
 Article 270 (`[aer|o]`) is used for testing parser fixes. Expected structure after latest fixes:
