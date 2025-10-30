@@ -318,6 +318,97 @@ Check environment variables or defaults in `backend/app/database.py`. Default co
 3. Test `parse_illustration` function in isolation
 4. Look for recent changes in `parser_v2.0_clean.py` git history
 
+## Recent fixes: Duplicate elimination and numbered translation handling (30.10.25)
+
+### Problem
+Articles with numbered values (1., 2., ...) had duplicate translation groups appearing in the review payload. For example, article 383 ([afekt|i]) had 54 groups instead of expected ~27, with each numbered value's translations appearing multiple times.
+
+### Root causes identified
+1. **Triple invocation of `build_translation_review`:**
+   - Called in `article_parser.py` when creating `ArticleParseResult`
+   - Called again in `article_review.load_article()` when fetching the same article
+   - Called third time in `reparse_article()` which internally called `load_article()`
+
+2. **Numbered value content vs children confusion:**
+   - Initial implementation skipped content of numbered translations, treating it as a header
+   - Actually, content contains the FIRST translation(s), children contain additional translations/examples
+   - This caused missing translations (e.g., `аффект`ировать` from value 1)
+
+3. **Fallback source (`_apply_source_fallback`) duplication:**
+   - `article_sections` dictionary contained ALL lines including numbered values
+   - Fallback logic would re-parse these lines, creating duplicate groups
+   - Continuation lines (indented text after numbered value) were not filtered
+
+### Solutions implemented
+
+**1. Review caching in ArticleParseResult:**
+```python
+# In article_parser.py
+@dataclass(slots=True)
+class ArticleParseResult:
+    ...
+    review: Optional[Any] = None  # Cache TranslationReview object
+```
+
+**2. New method `_build_payload_from_result` in ArticleReviewService:**
+- Builds payload from existing `result.review` without re-parsing
+- Used in `reparse_article()` to avoid calling `load_article()` which would re-parse
+- Handles datetime conversion for notes correctly
+
+**3. Numbered translation content processing:**
+```python
+# In translation_review.py _collect_groups_from_blocks()
+if block_number is not None:
+    # Process content as FIRST translation (not a header!)
+    block_content = _clone_nodes(block.get("content") or [])
+    if block_content:
+        content_normalized = _normalize_labelled_content(block_content)
+        if content_normalized:
+            buffer_content.append(content_normalized)
+    
+    # Then process children (additional translations/examples)
+    for child in block.get("children") or []:
+        ...
+```
+
+**4. Enhanced filtering in `_apply_source_fallback`:**
+```python
+def _is_example_line(text: str) -> bool:
+    stripped = text.strip()
+    if stripped.startswith('~'):
+        return True
+    # Filter numbered values (1., 2., ...)
+    if re.match(r'^\s*\*?\s*\d+\.', stripped):
+        return True
+    # Filter lines with Latin letters (Esperanto examples)
+    cleaned = text.replace('_', '').replace('<', '').replace('>', '').strip()
+    return any('a' <= c <= 'z' or 'A' <= c <= 'Z' for c in cleaned)
+
+# Skip continuation lines after numbered value
+skip_until_semicolon = False
+for line in section_lines:
+    if re.match(r'^\*?\s*\d+\.', line.strip()):
+        skip_until_semicolon = True
+        continue
+    if skip_until_semicolon:
+        if line.rstrip().endswith(';'):
+            skip_until_semicolon = False
+        continue
+    ...
+```
+
+### Results
+- **Article 383:** 53 groups (was 54), 7 [afekt|i] groups (was 8)
+- **Article 270:** 25 groups (expected ~25), no regressions
+- **Article 365:** 4 groups, no regressions
+- Performance: `build_translation_review` called once instead of three times
+
+### Note on "duplicates" in different numbered values
+If the same translation appears in content of numbered value 1 and numbered value 2 (e.g., `притвор'яться` in article 383), these are NOT considered duplicates. They represent the same word used in different semantic contexts (meanings 1 and 2). Both entries are preserved for:
+- Full-text search (finds the article regardless)
+- Proper semantic tagging in final JSON output
+- Synonym relationship tracking per meaning
+
 ## Quick reference: test article 270
 
 Article 270 (`[aer|o]`) is used for testing parser fixes. Expected structure after latest fixes:
