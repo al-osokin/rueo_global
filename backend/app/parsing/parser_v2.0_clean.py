@@ -1335,7 +1335,11 @@ def parse_rich_text(text: str, preserve_punctuation: bool = False, italic_open: 
             })
         elif part.startswith('(') and part.endswith(')'):
             paren_content = part[1:-1]
-            if len(paren_content.strip()) <= 1:
+            # Если содержимое начинается с граве, это не примечание, а часть текста (опциональное слово)
+            starts_with_grave = paren_content.lstrip().startswith('`')
+            
+            if len(paren_content.strip()) <= 1 or starts_with_grave:
+                # Это опциональная часть или короткая скобка - оставляем как текст
                 if content and content[-1]['type'] == 'text':
                     content[-1]['text'] += part
                 elif i + 1 < len(parts) and parts[i + 1] and not parts[i + 1].startswith(('<', '{', '_')) and parts[i + 1] not in [',', ';', ':', '.', '!', '?']:
@@ -1347,6 +1351,7 @@ def parse_rich_text(text: str, preserve_punctuation: bool = False, italic_open: 
                         'text': part
                     })
             else:
+                # Это примечание
                 content.append({
                     'type': 'note',
                     'text': paren_content
