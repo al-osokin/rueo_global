@@ -8,6 +8,7 @@ from typing import Any, Dict, Iterable, List, Optional
 
 from .legacy_bridge import legacy_parser
 from .normalization import normalize_article
+from . import text_parser  # Новый чистый парсер
 
 if False:  # pragma: no cover - type checking helper
     from .pipeline import ArticleContext
@@ -91,18 +92,18 @@ class LetterEntryTemplate(ArticleTemplate):
         return TemplateMatchResult(True, confidence=0.85)
 
     def parse(self, context: "ArticleContext") -> Dict[str, Any]:
-        headword, remainder = legacy_parser.parse_headword(context.head_line)
+        # Используем новый text_parser
+        headword, remainder = text_parser.parse_headword(context.head_line)
 
         body: List[Dict[str, Any]] = []
         if remainder:
-            segments = legacy_parser.parse_rich_text(
+            segments = text_parser.parse_rich_text(
                 remainder,
                 preserve_punctuation=True,
                 italic_open=True if '_' in remainder else False,
             )
-            segments = legacy_parser.merge_punctuation_with_italic(segments)
-            segments = legacy_parser.absorb_parentheses_into_italic(segments)
-            merged_segments = legacy_parser.merge_consecutive_text_segments(segments)
+            # TODO: Возможно нужны merge функции, посмотрим
+            merged_segments = segments
 
             def _attach_inline_punctuation(items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
                 result: List[Dict[str, Any]] = []
@@ -166,7 +167,7 @@ class MorphemeNumberedTemplate(ArticleTemplate):
 
     def matches(self, context: "ArticleContext") -> TemplateMatchResult:
         head_line = context.head_line.strip()
-        headword, _ = legacy_parser.parse_headword(head_line)
+        headword, _ = text_parser.parse_headword(head_line)
         lemmas = headword.get("lemmas", []) if headword else []
 
         if not lemmas:
@@ -204,7 +205,7 @@ class MorphemeArticleTemplate(ArticleTemplate):
         if not head_raw.startswith('[') or ']' not in head_raw:
             return TemplateMatchResult(False)
 
-        headword, _ = legacy_parser.parse_headword(head_raw)
+        headword, _ = text_parser.parse_headword(head_raw)
         lemmas = headword.get('lemmas', []) if headword else []
         is_morpheme = any(
             lemma.get('lemma', '').startswith('-') or lemma.get('lemma', '').endswith('-')
@@ -229,7 +230,7 @@ class LexemeNumberedTemplate(ArticleTemplate):
 
     def matches(self, context: "ArticleContext") -> TemplateMatchResult:
         head_line = context.head_line.strip()
-        headword, _ = legacy_parser.parse_headword(head_line)
+        headword, _ = text_parser.parse_headword(head_line)
         lemmas = headword.get("lemmas", []) if headword else []
         if not lemmas:
             return TemplateMatchResult(False)

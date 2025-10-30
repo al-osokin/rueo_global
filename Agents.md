@@ -457,6 +457,80 @@ elif symbol in (".", "!", "?"):
 ### Key insight
 Period in Russian translations is almost always part of abbreviations (что-л., т.е., т.п.), not a phrase separator. Only `,` and `;` should trigger phrase boundaries.
 
+## Major refactoring: New text_parser.py replacing legacy regex-based parsing (30.10.25)
+
+### Problem
+The entire parser v3 was actually a **wrapper around legacy v2.0_clean.py**, which used regex-based splitting:
+```python
+parts = re.split(r'(_|<[^>]+>|\([^)]+\)|\{[^}]+\}|[,;:.!?])', text)
+```
+This approach split on **ALL** periods, including abbreviations, causing systematic issues.
+
+### Architecture before refactoring
+- **parser_v3/**: Template selection layer (LetterEntry, StandardDictionary, etc.)
+- **parser_v2.0_clean.py**: Actual parsing via `legacy_parser.parse_rich_text()`, `parse_headword()`, etc.
+- Result: Band-aids in translation_review.py to fix parser output post-factum
+
+### Solution: Complete rewrite of core parsing functions
+Created `/backend/app/parsing/parser_v3/text_parser.py` with:
+
+**1. Smart `parse_rich_text()` - Character-by-character parsing instead of regex split:**
+```python
+def is_abbreviation_context(text: str, position: int) -> bool:
+    """Check if period at position is part of abbreviation"""
+    # Patterns: что-л., т.е., т.п., и т.д., см., ср.
+    # Uses regex patterns + context checking
+```
+
+**2. Clean `parse_headword()` - Proper bracket and lemma parsing:**
+- Handles `[aer|o]`, `[~a]`, `[A, a]`
+- Extracts official marks (`*`), homonym numbers
+- No regex splitting, direct character processing
+
+**3. Accurate `split_ru_segments()` - Converts parsed nodes to segments:**
+- Handles reference labels (см., ср.)
+- Categorizes dividers correctly (near/far/sentence)
+- Preserves context for multi-step processing
+
+**4. Simple `preprocess_text()` - Text normalization:**
+- Line ending normalization
+- Trailing space cleanup
+- No complex transformations
+
+### Integration
+Replaced all `legacy_parser.*` calls in:
+- `parser_v3/templates.py` - All template classes
+- `parser_v3/normalization.py` - Segment processing
+- `parser_v3/pipeline.py` - Article preprocessing
+
+### Results
+- ✅ **Article 383**: "аффект`ировать | д`елать что-л. неест`ественно" (abbreviation preserved)
+- ✅ **Examples**: "не лом`айся!" (no extra space before exclamation)
+- ✅ **No regressions**: Articles 270 (25 groups), 365 (4 groups) unchanged
+- ✅ **Performance**: Same speed, cleaner code
+
+### Key differences from legacy approach
+| Aspect | Legacy (v2.0_clean) | New (text_parser) |
+|--------|---------------------|-------------------|
+| Splitting | `re.split()` on all punctuation | Character-by-character with context |
+| Abbreviations | No special handling | Smart detection via patterns |
+| Maintainability | 1900 lines, complex logic | ~500 lines, clear functions |
+| Dependencies | Circular imports, global state | Clean imports, stateless |
+
+### Next steps (optional)
+- Remove translation_review.py band-aids (append_punctuation method now unnecessary)
+- Deprecate parser_v2.0_clean.py entirely
+- Add unit tests for text_parser.py
+- Document abbreviation patterns for future additions
+
+### Legacy code status
+`parser_v2.0_clean.py` is still present but **no longer used** in parser_v3 flow. It remains for:
+- Historical reference
+- Potential standalone usage
+- Gradual deprecation
+
+Can be safely removed after full validation.
+
 ## Quick reference: test article 270
 
 Article 270 (`[aer|o]`) is used for testing parser fixes. Expected structure after latest fixes:

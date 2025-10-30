@@ -6,6 +6,7 @@ import re
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 from .legacy_bridge import legacy_parser
+from . import text_parser  # Новый чистый парсер
 
 register_label = getattr(legacy_parser, 'register_label', lambda _text: None)
 
@@ -489,8 +490,9 @@ def _build_ru_segments_from_translation(content: List[Dict[str, Any]]) -> Option
     if not combined_text:
         return None
 
-    parts = legacy_parser.parse_rich_text(combined_text, preserve_punctuation=False)
-    segments = legacy_parser.split_ru_segments(parts)
+    # Используем новый text_parser
+    parts = text_parser.parse_rich_text(combined_text, preserve_punctuation=False)
+    segments = text_parser.split_ru_segments(parts)
     return segments or None
 
 

@@ -8,6 +8,7 @@ from typing import Dict, Iterable, List, Optional
 
 from .legacy_bridge import legacy_parser
 from .templates import DEFAULT_TEMPLATES, ArticleTemplate, TemplateRegistry
+from . import text_parser  # Новый чистый парсер
 
 
 @dataclass
@@ -39,7 +40,8 @@ class ParsingPipeline:
         return results
 
     def parse_article(self, article_text: str, *, index: int = 0) -> Dict:
-        preprocessed = legacy_parser.preprocess_text(article_text)
+        # Используем новый text_parser
+        preprocessed = text_parser.preprocess_text(article_text)
         filtered_lines = _filter_relevant_lines(preprocessed)
         if not filtered_lines:
             return {'headword': None, 'body': []}
