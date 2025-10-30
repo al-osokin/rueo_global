@@ -160,10 +160,36 @@ class ArticleReviewService:
                 group_id = f"group_{index}"
                 stored = resolved_groups.get(group_id)
                 accepted = None
+                manual_override = None
                 if isinstance(stored, dict):
                     accepted = stored.get("accepted")
+                    manual_override = stored.get("manual_override")
                 if accepted is None:
                     accepted = not group.requires_review
+                
+                candidates_list = [
+                    {
+                        "id": candidate.candidate_id,
+                        "title": candidate.title,
+                        "items": list(candidate.items),
+                    }
+                    for candidate in group.candidates
+                ]
+                
+                if group.requires_review:
+                    manual_items = []
+                    if manual_override and isinstance(manual_override, str):
+                        manual_items = [phrase.strip() for phrase in manual_override.split("|") if phrase.strip()]
+                    candidates_list.append({
+                        "id": "manual",
+                        "title": "Свой вариант",
+                        "items": manual_items,
+                    })
+                
+                selected = group.selected_candidate
+                if manual_override and isinstance(manual_override, str) and manual_override.strip():
+                    selected = "manual"
+                
                 groups_payload.append(
                     {
                         "group_id": group_id,
@@ -174,15 +200,10 @@ class ArticleReviewService:
                         "auto_generated": group.auto_generated,
                         "section": group.section,
                         "accepted": bool(accepted),
-                        "candidates": [
-                            {
-                                "id": candidate.candidate_id,
-                                "title": candidate.title,
-                                "items": list(candidate.items),
-                            }
-                            for candidate in group.candidates
-                        ],
-                        "selected_candidate": group.selected_candidate,
+                        "candidates": candidates_list,
+                        "selected_candidate": selected,
+                        "manual_override": manual_override or "",
+                        "eo_source": group.eo_source,
                     }
                 )
 

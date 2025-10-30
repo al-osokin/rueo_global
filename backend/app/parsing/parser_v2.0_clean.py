@@ -147,8 +147,24 @@ def build_raw_tree(lines: List[str]) -> List[Dict]:
             'children': []
         }
 
+        # Проверяем, является ли текущая строка пронумерованным определением
+        is_numbered = re.match(r'^\d+\.\s+', node['text']) is not None
+        
+        # Pop из stack, пока indent предыдущего >= текущего
         while stack and stack[-1]['indent'] >= indent_level:
             stack.pop()
+        
+        # Если текущая строка - numbered translation,
+        # ищем в stack последний numbered translation и делаем pop до него
+        # Это гарантирует, что numbered translations будут siblings, а не nested
+        if is_numbered and stack:
+            # Ищем последний numbered node в stack
+            for i in range(len(stack) - 1, -1, -1):
+                if re.match(r'^\d+\.\s+', stack[i]['text']):
+                    # Нашли numbered node - делаем pop до него (не включая его)
+                    while len(stack) > i:
+                        stack.pop()
+                    break
 
         if stack:
             stack[-1]['children'].append(node)
@@ -189,6 +205,37 @@ def stitch_multiline_italic_blocks(tree: List[Dict], italic_open: bool = False) 
                 same_indent = prev_node['indent'] == current_indent
                 if same_indent and italic_state_open and not is_structural_line:
                     should_stitch = True
+                
+                # Проверка на продолжение иллюстрации с большим отступом
+                if not should_stitch and current_indent > prev_node['indent']:
+                    prev_text = prev_node['text'].strip()
+                    current_stripped = current_text.strip()
+                    
+                    if DEBUG_MODE and current_indent == 2 and prev_node['indent'] == 1:
+                        log_issue('debug_indent_check',
+                                f"Found continuation candidate: prev_indent={prev_node['indent']}, "
+                                f"current_indent={current_indent}, "
+                                f"prev_text={repr(prev_text[:80])}, "
+                                f"current_text={repr(current_stripped[:80])}")
+                    
+                    # Предыдущая строка должна содержать и латиницу и кириллицу (иллюстрация)
+                    has_latin = any('a' <= c <= 'z' or 'A' <= c <= 'Z' for c in prev_text)
+                    has_cyrillic = any('\u0400' <= c <= '\u04FF' for c in prev_text)
+                    # Текущая строка начинается с кириллицы или подчёркиванием с кириллицей
+                    starts_with_cyrillic = False
+                    if current_stripped:
+                        first_char = current_stripped.lstrip('_')[0] if current_stripped.lstrip('_') else ''
+                        starts_with_cyrillic = first_char and '\u0400' <= first_char <= '\u04FF'
+                    
+                    if DEBUG_MODE and has_latin and has_cyrillic:
+                        log_issue('debug_stitch_check', 
+                                f"Checking continuation: prev_indent={prev_node['indent']}, "
+                                f"current_indent={current_indent}, "
+                                f"starts_with_cyrillic={starts_with_cyrillic}, "
+                                f"current_text={current_text[:50]}")
+                    
+                    if has_latin and has_cyrillic and starts_with_cyrillic and not is_structural_line:
+                        should_stitch = True
 
             underscores = count_unescaped_underscores(current_text)
             next_italic_state = italic_state_open
@@ -225,6 +272,32 @@ def stitch_multiline_italic_blocks(tree: List[Dict], italic_open: bool = False) 
                     next_italic_state,
                     current_note_context
                 )
+                
+                # Проверяем, нужно ли приклеить первого ребёнка к родителю (продолжение иллюстрации)
+                if node['children'] and current_indent > 0:
+                    first_child = node['children'][0]
+                    parent_text = node['text'].strip()
+                    child_text = first_child['text'].strip()
+                    
+                    # Не применяем для numbered translations (они уже обработаны)
+                    parent_is_numbered = re.match(r'^\d+\.\s+', parent_text) is not None
+                    
+                    if not parent_is_numbered:
+                        # Родитель должен содержать и латиницу и кириллицу (иллюстрация)
+                        has_latin = any('a' <= c <= 'z' or 'A' <= c <= 'Z' for c in parent_text)
+                        has_cyrillic = any('\u0400' <= c <= '\u04FF' for c in parent_text)
+                        # Ребёнок начинается с кириллицы
+                        starts_with_cyrillic = False
+                        if child_text:
+                            first_char = child_text.lstrip('_')[0] if child_text.lstrip('_') else ''
+                            starts_with_cyrillic = first_char and '\u0400' <= first_char <= '\u04FF'
+                        
+                        if has_latin and has_cyrillic and starts_with_cyrillic:
+                            # Склеиваем родителя с первым ребёнком
+                            node['text'] = node['text'].rstrip() + ' ' + first_child['text'].lstrip()
+                            # Переносим children ребёнка к родителю и удаляем первого ребёнка
+                            node['children'] = first_child['children'] + node['children'][1:]
+                
                 result.append(node)
 
             target_node = result[-1]
@@ -648,7 +721,16 @@ def parse_headword_remainder(text: str, *, is_morpheme: bool = False) -> List[Di
                 reference_mode = 'compare'
                 pending_reference_label = stripped
                 continue
+            
+            # Стилистические пометы не должны попадать в перевод
+            stylistic_markers = {'прям', 'прям.', 'перен', 'перен.', 'букв', 'букв.', 'устар', 'устар.', 'разг', 'разг.', 'поэт', 'поэт.'}
             candidate = stripped.rstrip('.')
+            if candidate.lower() in stylistic_markers:
+                # Стилистические пометы идут в explanation
+                explanation = ensure_explanation()
+                explanation['content'].append({'type': 'text', 'style': 'italic', 'text': stripped})
+                continue
+            
             if stripped and candidate and len(candidate) <= 6 and ' ' not in candidate:
                 translation = ensure_translation()
                 if any(ch in '()[]{}' for ch in stripped):
@@ -680,10 +762,11 @@ def parse_headword_remainder(text: str, *, is_morpheme: bool = False) -> List[Di
             close_explanation()
             after_colon = text_clean[1:].strip()
             if after_colon:
-                nodes.append({
-                    'type': 'illustration',
-                    'content': [{'type': 'text', 'style': 'regular', 'text': after_colon}]
-                })
+                # Текст после двоеточия - это пример, нужно разделить на EO и RU
+                illustration_data = parse_illustration(after_colon)
+                illustration_node = {'type': 'illustration'}
+                illustration_node.update(illustration_data)
+                nodes.append(illustration_node)
             continue
 
         synonym_targets: List[str] = []
@@ -1008,9 +1091,41 @@ def classify_node(node: Dict, in_note_context: bool = False) -> Dict:
 
     # Иллюстрация (пример) - если есть отступ
     if indent > 0:
-        result['type'] = 'illustration'
-        result.update(parse_illustration(text))
-        return result
+        # Проверяем, является ли это примером (содержит ~ перед латинской буквой)
+        stripped_text = text.strip()
+        # Паттерн ~letter указывает на использование корня в примере
+        is_example = stripped_text.startswith('~') or re.search(r'~[a-zA-Z]', stripped_text)
+        if is_example:
+            # Это иллюстрация (пример)
+            result['type'] = 'illustration'
+            # Собираем текст из всех дочерних узлов (для многострочных примеров)
+            full_text = text
+            if node.get('children'):
+                child_texts = []
+                # Проверяем, являются ли children отдельными примерами (начинаются с ~)
+                children_are_examples = any(
+                    child.get('text', '').strip().startswith('~')
+                    for child in node['children']
+                )
+                
+                if not children_are_examples:
+                    # Склеиваем продолжение многострочного примера
+                    for child in node['children']:
+                        child_text = child.get('text', '').strip()
+                        if child_text:
+                            child_texts.append(child_text)
+                    if child_texts:
+                        full_text = full_text.rstrip() + ' ' + ' '.join(child_texts)
+                        # Удаляем children, так как их текст уже включён в full_text
+                        node['children'] = []
+                # else: children остаются - они будут обработаны как отдельные illustrations
+            
+            result.update(parse_illustration(full_text))
+            return result
+        else:
+            # Это translation с отступом (не пример)
+            # Обрабатываем как обычный translation ниже
+            pass
 
     # Определение по умолчанию
     result['type'] = 'translation'
@@ -1647,7 +1762,18 @@ def parse_article(article_text: str) -> Dict:
     initial_italic_state = False
     if remaining_text:
         initial_italic_state = count_unescaped_underscores(remaining_text) % 2 == 1
-        head_remainder_nodes = parse_headword_remainder(remaining_text, is_morpheme=is_morpheme_headword)
+        # Проверяем, есть ли пронумерованное определение в остатке
+        # Если да, добавляем его в body_lines, чтобы обработать через classify_node
+        stripped_remainder = remaining_text.strip()
+        numbered_match = re.match(r'^\*?\s*(\d+)\.\s+', stripped_remainder)
+        if numbered_match and not is_morpheme_headword:
+            # Пронумерованное определение - добавляем в начало body
+            # Сохраняем отступ (если есть) для правильной обработки
+            body_lines = [remaining_text] + body_lines
+            # initial_italic_state остаётся, так как он влияет на первую body line
+        else:
+            # Обычный остаток - обрабатываем как раньше
+            head_remainder_nodes = parse_headword_remainder(remaining_text, is_morpheme=is_morpheme_headword)
 
     raw_tree = build_raw_tree(body_lines)
     stitched_tree = stitch_multiline_italic_blocks(raw_tree, italic_open=initial_italic_state)

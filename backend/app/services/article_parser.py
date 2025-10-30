@@ -261,6 +261,14 @@ class ArticleParserService:
             stored_manual = resolved.get("manual_phrases")
             if isinstance(stored_manual, list):
                 manual_phrases = [item for item in stored_manual if isinstance(item, str)]
+            for group_data in resolved_groups.values():
+                if isinstance(group_data, dict):
+                    manual_override = group_data.get("manual_override")
+                    if manual_override and isinstance(manual_override, str):
+                        for phrase in manual_override.split("|"):
+                            cleaned = phrase.strip()
+                            if cleaned and cleaned not in manual_phrases:
+                                manual_phrases.append(cleaned)
 
         apply_candidate_selection(review, resolved_groups)
         translations = collect_translation_phrases(review, manual_phrases)
@@ -270,10 +278,17 @@ class ArticleParserService:
             group_id = f"group_{index}"
             stored = resolved_groups.get(group_id)
             accepted = None
+            selected_candidate = None
+            manual_override = None
             if isinstance(stored, dict):
                 accepted = stored.get("accepted")
+                selected_candidate = stored.get("selected_candidate")
+                manual_override = stored.get("manual_override")
 
             if accepted is True:
+                continue
+
+            if selected_candidate == "manual" and manual_override and isinstance(manual_override, str) and manual_override.strip():
                 continue
 
             if group.requires_review or (group.auto_generated and accepted is not True):

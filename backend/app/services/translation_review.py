@@ -30,6 +30,7 @@ class TranslationGroup:
     section: Optional[str] = None
     candidates: List[TranslationCandidate] = field(default_factory=list)
     selected_candidate: Optional[str] = None
+    eo_source: Optional[str] = None  # Esperanto text for examples/illustrations
 
     @property
     def is_empty(self) -> bool:
@@ -238,7 +239,7 @@ def _collect_groups_from_blocks(
         nonlocal buffer_content, buffer_requires_review, buffer_continues, pending_suffixes
         if not buffer_content:
             return
-
+        
         combined: List[Dict] = []
         for chunk in buffer_content:
             combined.extend(chunk)
@@ -354,6 +355,8 @@ def _collect_groups_from_blocks(
             groups.extend(example_groups)
             notes.extend(example_notes)
             continue
+        
+
 
         if block_type == "explanation":
             extracted_content, extra_notes = _extract_translation_from_explanation(block.get("content") or [])
@@ -424,9 +427,69 @@ def _collect_groups_from_blocks(
             block_number = block.get("number")
             if buffer_content and block_number is not None:
                 _flush_buffer()
+            
+            # Если это пронумерованное значение (1., 2., ...), его content - это заголовок,
+            # а не перевод. Пропускаем content, обрабатываем только children
+            if block_number is not None:
+                # Рекурсивно обрабатываем детей пронумерованного значения
+                for child in block.get("children") or []:
+                    child_type = child.get("type")
+                    if child_type == "translation":
+                        if buffer_content and child.get("number") is not None:
+                            _flush_buffer()
+                        child_content_raw = _clone_nodes(child.get("content") or [])
+                        child_content = _normalize_labelled_content(child_content_raw)
+                        if child_content:
+                            buffer_content.append(child_content)
+                            if child.get("ru_requires_review"):
+                                buffer_requires_review = True
+                            buffer_continues = _block_indicates_continuation(child)
+                        
+                        # Обрабатываем детей child (примеры)
+                        for grandchild in child.get("children") or []:
+                            if grandchild.get("type") == "illustration" and grandchild.get("eo"):
+                                _flush_buffer()
+                                example_section = grandchild.get("eo_raw") or grandchild.get("eo")
+                                example_groups, example_notes = _build_groups_from_example(
+                                    grandchild,
+                                    example_section,
+                                    article_sections,
+                                )
+                                groups.extend(example_groups)
+                                notes.extend(example_notes)
+                    
+                    elif child_type == "illustration":
+                        if child.get("eo"):
+                            _flush_buffer()
+                            example_section = child.get("eo_raw") or child.get("eo")
+                            example_groups, example_notes = _build_groups_from_example(
+                                child,
+                                example_section,
+                                article_sections,
+                            )
+                            groups.extend(example_groups)
+                            notes.extend(example_notes)
+                        else:
+                            child_content = _clone_nodes(child.get("content") or [])
+                            if child_content:
+                                buffer_content.append(child_content)
+                                if child.get("ru_requires_review"):
+                                    buffer_requires_review = True
+                                buffer_continues = _block_indicates_continuation(child)
+                
+                # После обработки всех детей, flush buffer
+                _flush_buffer()
+                continue
+            
+            # Обычный translation (не numbered)
             block_requires_review = bool(block.get("ru_requires_review"))
             block_continuation = _block_indicates_continuation(block)
             is_plain_illustration = block_type == "illustration" and not block.get("eo")
+            
+            # Если в buffer уже есть контент и новый блок не является продолжением,
+            # сбрасываем buffer перед добавлением нового контента
+            if buffer_content and not buffer_continues and not block_continuation:
+                _flush_buffer()
             merge_suffix = False
             if is_plain_illustration and buffer_content:
                 raw_content = block.get("content") or []
@@ -478,7 +541,8 @@ def _collect_groups_from_blocks(
             if block_requires_review:
                 buffer_requires_review = True
             buffer_continues = block_continuation
-
+            
+            # Обрабатываем children (только для не-numbered translations)
             for child in block.get("children") or []:
                 child_type = child.get("type")
                 if child_type == "translation":
@@ -491,13 +555,26 @@ def _collect_groups_from_blocks(
                         if child.get("ru_requires_review"):
                             buffer_requires_review = True
                         buffer_continues = _block_indicates_continuation(child)
-                elif child_type == "illustration" and not child.get("eo"):
-                    child_content = _clone_nodes(child.get("content") or [])
-                    if child_content:
-                        buffer_content.append(child_content)
-                        if child.get("ru_requires_review"):
-                            buffer_requires_review = True
-                        buffer_continues = _block_indicates_continuation(child)
+                elif child_type == "illustration":
+                    # Иллюстрации С разделением eo/ru должны обрабатываться отдельно
+                    if child.get("eo"):
+                        _flush_buffer()
+                        example_section = child.get("eo_raw") or child.get("eo")
+                        example_groups, example_notes = _build_groups_from_example(
+                            child,
+                            example_section,
+                            article_sections,
+                        )
+                        groups.extend(example_groups)
+                        notes.extend(example_notes)
+                    else:
+                        # Иллюстрации БЕЗ разделения попадают в переводы
+                        child_content = _clone_nodes(child.get("content") or [])
+                        if child_content:
+                            buffer_content.append(child_content)
+                            if child.get("ru_requires_review"):
+                                buffer_requires_review = True
+                            buffer_continues = _block_indicates_continuation(child)
             continue
 
         _flush_buffer()
@@ -518,6 +595,8 @@ def _build_groups_from_example(
 ) -> Tuple[List[TranslationGroup], List[str]]:
     segments = block.get("ru_segments") or []
     content = _ru_segments_to_content(segments)
+    eo_text = block.get("eo")  # Esperanto source text for examples
+    
     if not content:
         return [], []
 
@@ -527,6 +606,7 @@ def _build_groups_from_example(
         section=section,
         article_sections=article_sections,
     )
+    
     requires_review = bool(block.get("ru_requires_review"))
 
     groups: List[TranslationGroup] = []
@@ -541,6 +621,7 @@ def _build_groups_from_example(
             expanded_items = _split_leading_adjectives(expanded_items)
         expanded_items = _normalize_compound_terms(expanded_items)
         candidates = _build_translation_candidates(base_items, expanded_items)
+        
         group = TranslationGroup(
             items=list(expanded_items),
             label=label,
@@ -549,6 +630,7 @@ def _build_groups_from_example(
             auto_generated=auto_generated,
             section=section,
             candidates=candidates,
+            eo_source=eo_text,
         )
         _select_candidate(group, None)
         groups.append(group)
@@ -953,8 +1035,59 @@ def _apply_source_fallback(
     section_lines = article_sections.get(section)
     if not section_lines:
         return specs, extra_notes
-    # Concatenate lines preserving original separators
-    source_text = " ".join(line.strip() for line in section_lines if line.strip())
+    
+    # Если content содержит только простой текст (один text node без dividers),
+    # не применяем fallback - это простой заголовочный перевод
+    content_list = list(content)
+    if len(content_list) == 1 and content_list[0].get("type") == "text":
+        return specs, extra_notes
+    
+    # Фильтруем строки, содержащие латинские буквы или начинающиеся с ~ (это примеры)
+    def _is_example_line(text: str) -> bool:
+        # Убираем отступы
+        stripped = text.strip()
+        # Строки, начинающиеся с ~ - это примеры
+        if stripped.startswith('~'):
+            return True
+        # Проверяем на латинские буквы (убрав маркеры)
+        cleaned = text.replace('_', '').replace('<', '').replace('>', '').strip()
+        return any('a' <= c <= 'z' or 'A' <= c <= 'Z' for c in cleaned)
+    
+    # Объединяем строки в группы по разделителям, исключая примеры
+    result_groups = []
+    current_group = []
+    is_example_group = False
+    
+    for line in section_lines:
+        if not line.strip():
+            continue
+        
+        # Если строка начинается с ~, начинается новая группа-пример
+        if line.strip().startswith('~'):
+            # Сохраняем предыдущую группу, если не была примером
+            if current_group and not is_example_group:
+                result_groups.append(' '.join(current_group))
+            current_group = []
+            is_example_group = True
+            continue
+        
+        # Если это конец группы (заканчивается на ;)
+        if line.rstrip().endswith(';'):
+            if not is_example_group:
+                current_group.append(line.strip())
+                result_groups.append(' '.join(current_group))
+            current_group = []
+            is_example_group = False
+        else:
+            # Продолжение текущей группы
+            if not is_example_group and not _is_example_line(line):
+                current_group.append(line.strip())
+    
+    # Добавляем последнюю группу
+    if current_group and not is_example_group:
+        result_groups.append(' '.join(current_group))
+    
+    source_text = " ".join(result_groups)
     if not source_text:
         return specs, extra_notes
 
@@ -966,6 +1099,10 @@ def _apply_source_fallback(
     tokenized_parts: List[List[str]] = []
     reference_notes_buffer: List[str] = []
     for part in raw_parts:
+        # Пропускаем чистые ссылки типа "_ср._ <ventoli>, <ventumi>"
+        if _is_pure_reference_segment(part):
+            continue
+        
         cleaned = _clean_spacing(part.replace("_", " "))
         cleaned = _strip_leading_markers(cleaned)
         leading_note_match = re.match(r"\(([^)]+)\)\s*", cleaned)
@@ -1135,6 +1272,31 @@ def _split_source_segments(text: str) -> List[str]:
     return segments
 
 
+def _is_pure_reference_segment(text: str) -> bool:
+    """
+    Проверяет, является ли сегмент чистой ссылкой (ср. <...>, см. <...>).
+    Такие сегменты не должны попадать в переводы.
+    """
+    # Убираем markdown _ и пробелы
+    cleaned = text.replace("_", "").strip()
+    
+    # Проверяем, начинается ли с "ср." или "см."
+    if not (cleaned.startswith("ср.") or cleaned.startswith("см.")):
+        return False
+    
+    # Убираем префикс
+    rest = cleaned[3:].strip()
+    
+    # Должны остаться только ссылки <...> и разделители
+    # Убираем все ссылки вида <что-то>
+    without_refs = re.sub(r'<[^>]+>', '', rest)
+    # Убираем запятые и пробелы
+    without_refs = without_refs.replace(',', '').replace(' ', '').strip()
+    
+    # Если ничего не осталось - это чистая ссылка
+    return len(without_refs) == 0
+
+
 def _remove_reference_suffix(value: str) -> Tuple[str, List[str]]:
     notes: List[str] = []
 
@@ -1302,7 +1464,10 @@ _IGNORABLE_LABELS = {
     "анат",
     "ист",
     "хим",
+    "прям",
+    "прям.",
     "перен",
+    "перен.",
     "биол",
     "линг",
     "геол",

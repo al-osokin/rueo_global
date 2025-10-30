@@ -225,20 +225,35 @@
                     <div
                       v-for="candidate in group.candidates"
                       :key="candidate.id || candidate.title"
-                      class="row no-wrap items-start"
+                      class="column"
                     >
-                      <q-radio
-                        :model-value="group.selected_candidate"
-                        :name="group.group_id"
-                        :val="candidate.id"
-                        dense
-                        @update:model-value="(val) => onCandidateChange(group, val)"
-                      />
-                      <div class="q-ml-sm">
-                        <div class="text-body2">{{ candidate.title }}</div>
-                        <div class="text-caption text-grey-7">
-                          {{ formatItems(candidate.items) }}
+                      <div class="row no-wrap items-start">
+                        <q-radio
+                          :model-value="group.selected_candidate"
+                          :name="group.group_id"
+                          :val="candidate.id"
+                          dense
+                          @update:model-value="(val) => onCandidateChange(group, val)"
+                        />
+                        <div class="q-ml-sm">
+                          <div class="text-body2">{{ candidate.title }}</div>
+                          <div class="text-caption text-grey-7" v-if="candidate.id !== 'manual' || candidate.items.length">
+                            {{ formatItems(candidate.items) }}
+                          </div>
                         </div>
+                      </div>
+                      <div v-if="candidate.id === 'manual' && group.selected_candidate === 'manual'" class="q-ml-md q-mt-xs">
+                        <q-input
+                          v-model="group.manual_override"
+                          outlined
+                          dense
+                          type="textarea"
+                          autogrow
+                          label="Введите варианты (синонимы через | )"
+                          hint="Например: выступать в роли адвоката | выступать в роли защитника"
+                          :disable="saving"
+                          @update:model-value="(val) => onManualOverrideChange(group, val)"
+                        />
                       </div>
                     </div>
                   </div>
@@ -398,6 +413,20 @@ const onCandidateChange = (group, candidateId) => {
   applyCandidateSelection(group, candidateId);
 };
 
+const onManualOverrideChange = (group, text) => {
+  if (!group) return;
+  const manualCandidate = group.candidates.find((c) => c.id === "manual");
+  if (manualCandidate) {
+    const newItems = text
+      ? text.split("|").map((phrase) => phrase.trim()).filter(Boolean)
+      : [];
+    manualCandidate.items = newItems;
+    if (group.selected_candidate === "manual") {
+      group.items = [...newItems];
+    }
+  }
+};
+
 const clearArticle = () => {
   article.value = null;
   groups.splice(0, groups.length);
@@ -458,6 +487,7 @@ const onFilter = (val, update, abort) => {
 
 const prepareGroups = (payload) => {
   groups.splice(0, groups.length);
+  const resolvedGroups = payload.resolved_translations?.groups || {};
   (payload.groups || []).forEach((group) => {
     const candidateList = Array.isArray(group.candidates)
       ? group.candidates.map((candidate) => ({
@@ -467,6 +497,7 @@ const prepareGroups = (payload) => {
         }))
       : [];
     const baseItems = Array.isArray(group.base_items) ? [...group.base_items] : [];
+    const storedGroup = resolvedGroups[group.group_id] || {};
     const localGroup = {
       group_id: group.group_id,
       label: group.label,
@@ -478,6 +509,7 @@ const prepareGroups = (payload) => {
       accepted: group.accepted,
       candidates: candidateList,
       selected_candidate: group.selected_candidate || (candidateList[0]?.id ?? null),
+      manual_override: storedGroup.manual_override || "",
     };
     applyCandidateSelection(localGroup, localGroup.selected_candidate);
     groups.push(localGroup);
@@ -531,6 +563,11 @@ const buildResolvedPayload = () => {
     };
     if (group.selected_candidate) {
       entry.selected_candidate = group.selected_candidate;
+    }
+    if (group.selected_candidate === "manual" && group.manual_override && group.manual_override.trim()) {
+      entry.manual_override = group.manual_override.trim();
+    } else if (group.selected_candidate !== "manual") {
+      entry.manual_override = "";
     }
     result.groups[group.group_id] = entry;
   });
