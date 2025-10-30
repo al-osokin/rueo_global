@@ -1898,8 +1898,21 @@ def _clone_nodes(nodes: Iterable[Dict]) -> List[Dict]:
 
 def _expand_parenthetical_forms(phrase: str) -> List[str]:
     phrase = phrase.replace("_", " ")
+    
+    # Защита от бесконечной рекурсии
+    MAX_DEPTH = 50
+    seen_texts = set()
 
-    def _recurse(text: str) -> List[str]:
+    def _recurse(text: str, depth: int = 0) -> List[str]:
+        # Проверка глубины рекурсии
+        if depth > MAX_DEPTH:
+            return [_clean_spacing(text)]
+        
+        # Проверка на зацикливание
+        if text in seen_texts:
+            return [_clean_spacing(text)]
+        seen_texts.add(text)
+        
         start = text.find("(")
         if start == -1:
             return [_clean_spacing(text)]
@@ -1913,9 +1926,9 @@ def _expand_parenthetical_forms(phrase: str) -> List[str]:
 
         inside_clean = inside.strip()
         if not inside_clean:
-            return _recurse(before + after)
+            return _recurse(before + after, depth + 1)
         if "=" in inside_clean:
-            return _recurse(before + after)
+            return _recurse(before + after, depth + 1)
 
         lower = inside_clean.lower()
         if any(keyword in lower for keyword in ("или", "либо")):
@@ -1947,7 +1960,7 @@ def _expand_parenthetical_forms(phrase: str) -> List[str]:
                     if rest and not rest.startswith((" ", ",", ".", ";", ":", ")")):
                         new_text += " "
                     new_text += rest_lstrip
-                    variants.extend(_recurse(new_text))
+                    variants.extend(_recurse(new_text, depth + 1))
                 return variants
 
         if " " not in inside_clean and "," not in inside_clean:
@@ -1977,7 +1990,7 @@ def _expand_parenthetical_forms(phrase: str) -> List[str]:
                 and not after_without_space.startswith((",", ";", ":", ".", ")", "—", "-", "‑"))
             )
             with_opt = before + inside_clean + (" " if insert_space else "") + after_without_space
-            return _recurse(without) + _recurse(with_opt)
+            return _recurse(without, depth + 1) + _recurse(with_opt, depth + 1)
 
         preserved_before = before
         if preserved_before and not preserved_before.endswith((" ", "-", "—", "‑", "/")):
@@ -1992,7 +2005,7 @@ def _expand_parenthetical_forms(phrase: str) -> List[str]:
             ) else " "
 
         preserved = f"{preserved_before}({inside_clean}){joiner}{preserved_after or ''}"
-        return _recurse(preserved)
+        return _recurse(preserved, depth + 1)
 
     return _deduplicate([_clean_spacing(item) for item in _recurse(phrase)])
 
