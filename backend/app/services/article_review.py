@@ -144,7 +144,10 @@ class ArticleReviewService:
         result = self.parser.parse_article_by_id(lang, art_id, include_raw=True)
         state = self._ensure_state(lang, art_id)
         notes = self._fetch_notes(lang, art_id)
-        review_data = build_translation_review(result.raw) if result.raw else None
+        # Используем уже созданный review из result, чтобы не вызывать build_translation_review дважды
+        review_data = result.review if hasattr(result, 'review') and result.review else (
+            build_translation_review(result.raw) if result.raw else None
+        )
 
         resolved = state.resolved_translations or {}
         resolved_groups = resolved.get("groups") if isinstance(resolved, dict) else {}
@@ -349,8 +352,111 @@ class ArticleReviewService:
         result = self.parser.parse_article_by_id(lang, art_id, include_raw=True)
         self.parser.store_result(result, replace_payload=True)
         self.session.commit()
-        payload = self.load_article(lang, art_id)
+        # Используем результат из result вместо повторного парсинга через load_article
+        payload = self._build_payload_from_result(result, lang, art_id)
         return payload, result
+    
+    def _build_payload_from_result(
+        self, result: "ArticleParseResult", lang: str, art_id: int
+    ) -> Dict[str, Any]:
+        """Строит payload из уже созданного result без повторного парсинга"""
+        state = self._ensure_state(lang, art_id)
+        notes = self._fetch_notes(lang, art_id)
+        review_data = result.review
+        
+        if not review_data:
+            return {"groups": [], "auto_candidates": [], "notes": []}
+        
+        # Остальная логика как в load_article
+        resolved = state.resolved_translations or {}
+        resolved_groups = resolved.get("groups") if isinstance(resolved, dict) else {}
+        if not isinstance(resolved_groups, dict):
+            resolved_groups = {}
+
+        groups_payload: List[Dict[str, Any]] = []
+        review_notes: List[str] = []
+        if review_data:
+            apply_candidate_selection(review_data, resolved_groups)
+            review_notes = review_data.notes
+            for index, group in enumerate(review_data.groups):
+                group_id = f"group_{index}"
+                stored = resolved_groups.get(group_id)
+                accepted = None
+                manual_override = None
+                if isinstance(stored, dict):
+                    accepted = stored.get("accepted")
+                    manual_override = stored.get("manual_override")
+                if accepted is None:
+                    accepted = not group.requires_review
+                
+                candidates_list = [
+                    {
+                        "id": candidate.candidate_id,
+                        "title": candidate.title,
+                        "items": list(candidate.items),
+                    }
+                    for candidate in group.candidates
+                ]
+                
+                if group.requires_review:
+                    manual_items = []
+                    if manual_override and isinstance(manual_override, str):
+                        manual_items = [phrase.strip() for phrase in manual_override.split("|") if phrase.strip()]
+                    candidates_list.append({
+                        "id": "manual",
+                        "title": "Свой вариант",
+                        "items": manual_items,
+                    })
+                
+                selected = group.selected_candidate
+                if manual_override and isinstance(manual_override, str) and manual_override.strip():
+                    selected = "manual"
+                
+                groups_payload.append(
+                    {
+                        "group_id": group_id,
+                        "items": list(group.items),
+                        "base_items": list(group.base_items),
+                        "label": group.label,
+                        "requires_review": group.requires_review,
+                        "auto_generated": group.auto_generated,
+                        "section": group.section,
+                        "candidates": candidates_list,
+                        "selected_candidate": selected,
+                        "accepted": accepted,
+                        "eo_source": group.eo_source,
+                    }
+                )
+        
+        auto_candidates = [
+            {"headword": result.headword, "translations": result.translations}
+        ] if result.headword and result.translations else []
+        
+        notes_payload = []
+        for note in notes:
+            created_at = note.get("created_at")
+            if created_at and hasattr(created_at, "isoformat"):
+                created_at_str = created_at.isoformat()
+            elif isinstance(created_at, str):
+                created_at_str = created_at
+            else:
+                created_at_str = None
+            
+            notes_payload.append({
+                "id": note.get("id"),
+                "author": note.get("author"),
+                "body": note.get("body"),
+                "created_at": created_at_str,
+            })
+        
+        if review_notes:
+            notes_payload.extend([{"id": None, "author": "system", "body": note, "created_at": None} for note in review_notes])
+        
+        return {
+            "groups": groups_payload,
+            "auto_candidates": auto_candidates,
+            "notes": notes_payload,
+        }
 
     def _ensure_state(self, lang: str, art_id: int) -> ArticleParseState:
         state = self.session.execute(

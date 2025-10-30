@@ -31,6 +31,7 @@ class ArticleParseResult:
     needs_review: bool = False
     raw: Optional[Dict] = None
     error: Optional[str] = None
+    review: Optional[Any] = None  # TranslationReview, но для избежания circular import используем Any
 
     def to_dict(self) -> Dict:
         data = asdict(self)
@@ -307,6 +308,7 @@ class ArticleParserService:
             needs_review=needs_review,
             raw=parsed if include_raw else None,
             error=None if success else "missing_headword",
+            review=review,
         )
 
     def parse_article_by_id(

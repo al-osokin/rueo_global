@@ -97,6 +97,8 @@ def build_translation_review(parsed_article: Dict) -> TranslationReview:
     meta = parsed_article.get("meta") or {}
     lang = meta.get("lang")
     art_id = meta.get("art_id")
+    
+
     article_sections = _get_article_sections(lang, art_id) if lang and art_id else None
     groups, notes = _collect_groups_from_blocks(
         parsed_article.get("body") or [],
@@ -428,10 +430,20 @@ def _collect_groups_from_blocks(
             if buffer_content and block_number is not None:
                 _flush_buffer()
             
-            # Если это пронумерованное значение (1., 2., ...), его content - это заголовок,
-            # а не перевод. Пропускаем content, обрабатываем только children
+            # Если это пронумерованное значение (1., 2., ...), его content - это ПЕРВЫЙ перевод
+            # (не заголовок!), а children - остальные переводы и примеры
             if block_number is not None:
-                # Рекурсивно обрабатываем детей пронумерованного значения
+                # Обрабатываем content как обычный translation (это первый перевод)
+                block_content = _clone_nodes(block.get("content") or [])
+                if block_content:
+                    content_normalized = _normalize_labelled_content(block_content)
+                    if content_normalized:
+                        buffer_content.append(content_normalized)
+                        if block.get("ru_requires_review"):
+                            buffer_requires_review = True
+                        buffer_continues = _block_indicates_continuation(block)
+                
+                # Затем обрабатываем детей пронумерованного значения
                 for child in block.get("children") or []:
                     child_type = child.get("type")
                     if child_type == "translation":
@@ -621,7 +633,6 @@ def _build_groups_from_example(
             expanded_items = _split_leading_adjectives(expanded_items)
         expanded_items = _normalize_compound_terms(expanded_items)
         candidates = _build_translation_candidates(base_items, expanded_items)
-        
         group = TranslationGroup(
             items=list(expanded_items),
             label=label,
@@ -1043,28 +1054,56 @@ def _apply_source_fallback(
         return specs, extra_notes
     
     # Фильтруем строки, содержащие латинские буквы или начинающиеся с ~ (это примеры)
+    # ТАКЖЕ фильтруем пронумерованные значения (1., 2., ...), которые уже обработаны через numbered translation logic
     def _is_example_line(text: str) -> bool:
         # Убираем отступы
         stripped = text.strip()
         # Строки, начинающиеся с ~ - это примеры
         if stripped.startswith('~'):
             return True
+        # Пронумерованные значения (1., 2., ...) - пропускаем, они уже обработаны
+        if re.match(r'^\s*\*?\s*\d+\.', stripped):
+            return True
         # Проверяем на латинские буквы (убрав маркеры)
         cleaned = text.replace('_', '').replace('<', '').replace('>', '').strip()
         return any('a' <= c <= 'z' or 'A' <= c <= 'Z' for c in cleaned)
     
-    # Объединяем строки в группы по разделителям, исключая примеры
+    # Объединяем строки в группы по разделителям, исключая примеры и numbered values
     result_groups = []
     current_group = []
     is_example_group = False
+    skip_until_semicolon = False  # Флаг для пропуска строк после numbered value
     
     for line in section_lines:
         if not line.strip():
             continue
         
+        # Если строка - numbered value (1., 2., ...), пропускаем её и всё до следующего ;
+        if _is_example_line(line):
+            # Сохраняем предыдущую группу
+            if current_group and not is_example_group and not skip_until_semicolon:
+                result_groups.append(' '.join(current_group))
+            current_group = []
+            
+            # Если это numbered value, пропускаем всё до ;
+            stripped = line.strip()
+            if re.match(r'^\*?\s*\d+\.', stripped):
+                skip_until_semicolon = True
+                is_example_group = False
+            else:
+                # Это example с ~ или латинскими буквами
+                is_example_group = True
+                skip_until_semicolon = False
+            continue
+        
+        # Если мы в режиме пропуска (после numbered value), пропускаем всё до ;
+        if skip_until_semicolon:
+            if line.rstrip().endswith(';'):
+                skip_until_semicolon = False
+            continue
+        
         # Если строка начинается с ~, начинается новая группа-пример
         if line.strip().startswith('~'):
-            # Сохраняем предыдущую группу, если не была примером
             if current_group and not is_example_group:
                 result_groups.append(' '.join(current_group))
             current_group = []
@@ -1080,11 +1119,11 @@ def _apply_source_fallback(
             is_example_group = False
         else:
             # Продолжение текущей группы
-            if not is_example_group and not _is_example_line(line):
+            if not is_example_group:
                 current_group.append(line.strip())
     
     # Добавляем последнюю группу
-    if current_group and not is_example_group:
+    if current_group and not is_example_group and not skip_until_semicolon:
         result_groups.append(' '.join(current_group))
     
     source_text = " ".join(result_groups)
