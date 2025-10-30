@@ -754,9 +754,12 @@ def _split_translation_groups(
             elif symbol == ";":
                 _flush_builder()
                 _finalize_group()
-            elif symbol in (".", "!", "?"):
-                # Знаки конца предложения/восклицания присоединяем к предыдущему слову
-                builder.append_punctuation(symbol)
+            elif symbol == ".":
+                # Парсер правильно обрабатывает сокращения, точка здесь - конец предложения
+                _flush_builder()
+            elif symbol in ("!", "?"):
+                # Восклицательный/вопросительный знак присоединяем к последнему слову БЕЗ пробела
+                builder.append_to_last(symbol)
             else:
                 builder.add_text(symbol)
             continue
@@ -1669,15 +1672,15 @@ class _PhraseBuilder:
         if cleaned:
             self._notes.append(cleaned)
 
-    def append_punctuation(self, punct: str) -> None:
-        """Присоединяет знак пунктуации к последнему компоненту (для сокращений типа 'что-л.')"""
-        if not self.components or not punct:
+    def append_to_last(self, suffix: str) -> None:
+        """Присоединяет суффикс к последнему компоненту без пробела (для !, ?)"""
+        if not self.components or not suffix:
             return
         last_options = self.components[-1]
         if last_options:
-            # Присоединяем пунктуацию к каждому варианту в последнем компоненте
+            # Присоединяем к каждому варианту в последнем компоненте
             for i in range(len(last_options)):
-                last_options[i] = last_options[i].rstrip() + punct
+                last_options[i] = last_options[i].rstrip() + suffix
 
     def flush(self) -> List[str]:
         return self._flush_into([])
