@@ -531,6 +531,45 @@ Replaced all `legacy_parser.*` calls in:
 
 Can be safely removed after full validation.
 
+## Full reparse after refactoring (30.10.25)
+
+### Preparation
+After major parser refactoring, all parsing states were reset:
+- Deleted all comments (23) for lang='eo'
+- Deleted all parsing states (46,356) for lang='eo'
+- Cleared database for fresh start
+
+### Recursion protection fix
+Fixed infinite recursion bug in `_expand_parenthetical_forms()`:
+- **Problem**: Article 39 caused infinite recursion on nested parentheses
+- **Solution**: 
+  * Added MAX_DEPTH = 50 limit
+  * Added `seen_texts` set to detect loops
+  * Pass `depth` parameter through all recursive calls
+
+### Full reparse results
+```
+Total articles:  46,377
+Success:         46,377 (100%)
+Errors:          0
+Time:            82.1 seconds
+Speed:           ~565 articles/second
+```
+
+### Validation
+All test articles passed:
+- **Article 270** [aer|o]: 25 groups ✓
+- **Article 365** [aer/trafik|o]: 4 groups ✓
+- **Article 383** [afekt|i]: 53 groups ✓
+  - Abbreviation 'что-л.' preserved ✓
+  - Exclamation mark 'не ломайся!' without space ✓
+
+### Status
+- ✅ **All 46k+ articles parsed successfully**
+- ✅ **Zero errors** with new text_parser.py
+- ✅ **Ready for editor review** from scratch
+- ✅ **Clean foundation** for continuing work
+
 ## Quick reference: test article 270
 
 Article 270 (`[aer|o]`) is used for testing parser fixes. Expected structure after latest fixes:
