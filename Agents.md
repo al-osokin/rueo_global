@@ -999,3 +999,91 @@ with SessionLocal() as session:
             print(f"  {g['section']}: eo_source={'YES' if eo else 'NO'}")
 PY
 ```
+
+## TODO: UI Improvements
+
+### Display article ID in admin review interface
+**Problem:** After removing ID display from "Начните вводить заголовок" field, there's no visible art_id anywhere in UI. This makes it hard to reference specific articles when debugging or communicating about issues.
+
+**Solution options:**
+1. **Display art_id in "Перейти по art_id" input field** - auto-fill with current article ID when article is loaded
+2. **Add art_id near article title** - e.g., "Article #270: [aer|o]" or small badge "ID: 270"
+3. **Both** - show in input field AND near title for clarity
+
+**Recommendation:** Display in BOTH places:
+- Input field auto-fills when article loads (allows quick copy-paste)
+- Small badge/label near title (always visible, doesn't interfere with navigation)
+
+**File to modify:** `frontend-app/src/pages/AdminReview.vue`
+
+**Priority:** Medium (quality of life improvement for editor/debugging)
+
+## Key Insights from 31.10.25 Session
+
+### Focused Debugging Approach - HIGHLY EFFECTIVE
+
+**Problem:** Complex bugs (like Issue #1 grave accent merging) are hard to debug with full context due to:
+- Accumulated conversation history (~100k+ tokens)
+- Multiple parallel concerns
+- Cognitive overhead from unrelated code
+
+**Solution implemented:**
+1. **Manager-Worker pattern:** First instance becomes "manager", prepares focused task
+2. **Minimal context file:** Create `Agents.FOCUSED.md` (~250 lines vs 972 lines)
+3. **Clear task spec:** `TASK_*.md` with step-by-step instructions
+4. **Fresh debugging session:** Second instance works with clean slate
+5. **Integration:** Manager integrates results back into main workflow
+
+**Results:**
+- Issue #1 solved in ~90 minutes by second instance
+- Root cause found in unexpected place (`_compress_optional_prefix_spacing`)
+- Would have taken much longer in cluttered context
+
+**When to use this approach:**
+- ELUSIVE bugs that resist obvious debugging
+- Complex issues requiring deep focus
+- When conversation context > 100k tokens
+- When fresh perspective needed
+
+**Workflow:**
+```bash
+# In manager session:
+1. Commit current work
+2. cp Agents.md Agents.FULL_HISTORY.md
+3. Create Agents.FOCUSED.md (focused context)
+4. Create TASK_*.md (clear instructions)
+5. Start new chat with focused files
+
+# In worker session:
+- Second Droid instance solves focused task
+- Returns: root cause + fix + tests
+
+# Back to manager:
+- Integrate results
+- Update documentation
+- Commit
+- Prepare next focused task if needed
+```
+
+### Pattern Matching Insights
+
+**Issue #3 success factors:**
+- Recognized that items arrive ALREADY SPLIT by comma
+- Changed approach from string parsing to LIST pattern detection
+- Function works on structure, not raw text
+
+**Lesson:** Always check WHAT DATA STRUCTURE arrives at function, not what you expect!
+
+### Session Statistics (31.10.25)
+
+**Solved:** 7 of 13 issues (54%!)
+- Issues #13, #8, #7, #10, #4 - solved in main session (~60k tokens)
+- Issue #1 - solved by second instance via focused approach (~40k tokens)
+- Issue #3 - solved in main session (~20k tokens)
+
+**Time:** ~5-6 hours total
+**Commits:** 4 commits with comprehensive documentation
+**Regressions:** 0 (all test articles stable)
+**Token efficiency:** Manager-worker approach saved ~50k+ tokens on Issue #1
+
+**Key success:** Combination of incremental progress + focused deep-dive for hard problems
