@@ -985,6 +985,47 @@ Parser created 3 separate translation children, resulting in **3 fragmented grou
 
 **Note:** Group count reductions in 270/383 are expected - these articles also had continuation line issues that are now fixed.
 
+### Issue #12: `_или_` alternative expansion - FIXED ✓
+**Problem:** Article 57 had broken expansion of alternatives with `_или_` (Russian "or"):
+```
+Source: "отложительный (_или_ отделительный, _или_ исходный) падеж, аблатив"
+Current: 2 broken groups with unclosed parentheses and fragments
+Expected: 4 items (3 adjective+noun combinations + аблатив)
+```
+
+**Root cause:** `_PhraseBuilder.add_alternatives()` received alternatives extracted from NOTE node (`['отделительный', 'исходный']`), but the FIRST variant (`'отложительный'`) was already added as regular text BEFORE the note. The method forgot to include it in the alternatives list.
+
+**Solution (by second agent via manager-worker pattern):**
+1. **Enhanced `add_alternatives()` method** (lines 1888-1954):
+   - Extracts last word from previous component (word before note)
+   - Prepends it as first alternative: `['отложительный', 'отделительный', 'исходный']`
+   - Handles remaining text (if any) in previous component
+   - Falls back to legacy prefix-inheritance for edge cases
+
+2. **Added defensive merge logic** (lines 702-788):
+   - `_merge_broken_translation_groups()`: post-process groups to catch split alternatives
+   - `_merge_translation_groups()`: combine consecutive groups with unclosed parentheses
+   - `_merge_parenthetical_strings()`: smart string merging for `"word (_или_"` + `"alt) rest"` patterns
+   - `_detect_parenthetical_connector()`: detect `или`/`либо` connectors
+
+3. **Enhanced `_extract_translation_from_explanation()`**: handle edge cases with unclosed parentheses
+
+**Test results:**
+- Article 57: ✓ **4 items** (was 2 broken groups)
+  1. `отложительный падеж`
+  2. `отделительный падеж`
+  3. `исходный падеж`
+  4. `аблатив`
+- Article 270: ✓ 24 groups (no regression)
+- Article 383: ✓ 45 groups (no regression)
+- Article 54 (Issue #5/#9): ✓ 3 items still work
+
+**Location:** `backend/app/services/translation_review.py`
+- `add_alternatives()` method: lines 1888-1954
+- Merge helpers: lines 702-788
+
+**Note:** Second agent overengineered (+166 lines vs expected 30), but solution is robust and handles edge cases defensively. Manager-worker pattern success #3!
+
 ### Issue #6: Optional parts after words - PARTIALLY FIXED ⚠️
 **Problem:** `отклонение (от нормы)` lost closing parenthesis, becoming `отклонение (от нормы` (article 39)
 **Solution implemented:**
@@ -1112,19 +1153,25 @@ PY
 
 ### Session Statistics (31.10.25)
 
-**Solved:** 8 of 13 issues (62%!)
+**Solved:** 9 of 13 issues (69%!)
 - Issues #13, #8, #7, #10, #4 - solved in main session (~60k tokens)
 - Issue #1 - solved by second instance via focused approach (~40k tokens)
 - Issue #3 - solved in main session (~20k tokens)
 - Issue #5/#9 - solved in continuation session (~90k tokens)
+- Issue #12 - solved by second instance via manager-worker pattern (~10k tokens)
 
-**Time:** ~7-8 hours total (including Issue #5/#9)
-**Commits:** 5 commits with comprehensive documentation
+**Time:** ~8-9 hours total (including all fixes)
+**Commits:** 6 commits with comprehensive documentation
 **Regressions:** 0 (all test articles functioning correctly, baseline updated)
-**Token efficiency:** Manager-worker approach saved ~50k+ tokens on Issue #1
+**Token efficiency:** Manager-worker approach highly effective (3/3 successes)
 
 **Issue #5/#9 success:** Multiline continuations fixed with smart merge logic
 - Article 54 [~iĝ/i]: 3 fragmented groups → 1 complete group with 3 full translations
 - Baseline updates: Article 270 (24 groups), Article 383 (45 groups) - expected reductions from continuation fixes
 
-**Key success:** Combination of incremental progress + focused deep-dive for hard problems + systematic debugging
+**Issue #12 success:** `_или_` alternatives expansion fixed via manager-worker pattern
+- Article 57 [ablativ|o]: 2 broken groups → 4 complete items (3 combinations + аблатив)
+- Second agent overengineered (+166 lines vs expected 30) but solution is robust
+- Manager-worker pattern: 3/3 successes (Issue #1, UI improvements, Issue #12)
+
+**Key success:** Combination of incremental progress + focused deep-dive for hard problems + systematic debugging + effective delegation
