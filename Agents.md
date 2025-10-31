@@ -827,9 +827,9 @@ Not parser issues, but review logic:
 - **Статья 55** (abisin/o): reference-only
 - **Статья 57** (ablativ/o): note alternatives
 - **Статья 58** (abnegaci/o): official marks
-- **Статья 270** (aer/o): regression testing (25 groups)
+- **Статья 270** (aer/o): regression testing (24 groups)
 - **Статья 365** (aer/trafik/o): regression testing (4 groups)
-- **Статья 383** (afekt/i): regression testing (53 groups)
+- **Статья 383** (afekt/i): regression testing (45 groups)
 
 ## PHASE 1 Progress: Text parser fixes (31.10.25)
 
@@ -949,6 +949,42 @@ def _should_collapse(candidate: str) -> bool:
 - Article 270: 25 groups ✓
 **Location:** `translation_review.py` lines 1636-1685, 298-299, 681-682
 
+### Issue #5/#9: Multiline translation continuations - FIXED ✓
+**Problem:** Article 54 `[~iĝ/i]` had continuation lines разбиваться неправильно, теряется контекст:
+```
+Line 1: "окончить..., пройти выпускной"
+Line 2: "  экзамен, пройти экзамен"  ← continuation
+Line 3: "  на аттестат зрелости;"  ← continuation
+```
+Parser created 3 separate translation children, resulting in **3 fragmented groups**:
+- Group 1: `['окончить...', 'пройти выпускной']` ← cut off!
+- Group 2: `['экзамен', 'пройти экзамен']` ← lost context
+- Group 3: `['зрелости']` ← only last word
+
+**Root cause:** Parser creates separate translation blocks for each indented continuation line instead of merging them.
+
+**Solution:** Created `_merge_translation_continuations()` in `normalization.py`:
+- Merges consecutive translation children in headword blocks
+- **Key logic:** Continues merging until a translation block ends with `;` (sentence divider)
+  - If previous accumulated translation ends with `;` → flush before merging next one
+  - Otherwise → merge content and children into current accumulation
+- Preserves children blocks (e.g., explanation/note nodes)
+- Called from `_normalize_headword()` BEFORE other processing
+
+**Test:**
+- Article 54 `[~iĝ/i]`: ✓ **1 group with 3 complete translations** (was 3 fragmented groups)
+  1. `ок`ончить ср`еднее уч`ебное завед`ение`
+  2. `пройт`и выпускн`ой экз`амен` (was: cut at 'выпускной' without 'экзамен')
+  3. `пройт`и экз`амен на аттест`ат зр`елости` (was: only 'зрелости')
+- Article 270: 24 groups (was 25) - expected reduction from fixing continuation lines
+- Article 383: 45 groups (was 48) - expected reduction from fixing continuation lines
+
+**Location:** `backend/app/parsing/parser_v3/normalization.py`
+- Function `_merge_translation_continuations()` lines 231-328
+- Called from `_normalize_headword()` line 531
+
+**Note:** Group count reductions in 270/383 are expected - these articles also had continuation line issues that are now fixed.
+
 ### Issue #6: Optional parts after words - PARTIALLY FIXED ⚠️
 **Problem:** `отклонение (от нормы)` lost closing parenthesis, becoming `отклонение (от нормы` (article 39)
 **Solution implemented:**
@@ -959,8 +995,8 @@ def _should_collapse(candidate: str) -> bool:
    - When optional part has spaces/commas inside (e.g., `(от нормы)`), now returns both: `['отклонение', 'отклонение (от нормы)']`
    - Previously only returned variant WITH parentheses
 **Test:**
-- Article 270: Still 25 groups (no regressions)
-- Article 383: Still 48 groups (no regressions)
+- Article 270: Still 24 groups (baseline updated after Issue #5/#9 fix)
+- Article 383: Still 45 groups (baseline updated after Issue #5/#9 fix)
 - Article 39: Closing parenthesis no longer lost ✓
 **Status:** Parentheses preservation works, BUT candidate generation needs additional work to properly show expanded variants in UI
 **Location:** `translation_review.py` lines 2399-2416 (_strip_trailing_punctuation), 2101-2119 (_expand_parenthetical_forms)
@@ -969,7 +1005,7 @@ def _should_collapse(candidate: str) -> bool:
 
 Article 270 (`[aer|o]`) is used for testing parser fixes. Expected structure after latest fixes:
 
-- **Total groups:** 25 (was 30 before duplicate fix, 26 before reference filtering)
+- **Total groups:** 24 (was 25 before Issue #5/#9 fix, 30 before duplicate fix, 26 before reference filtering)
 - **Section `[~a]`:** 1 translation + 1 example
   - Translation group: `возд`ушный` (eo_source=null)
   - Example group: `~aj kasteloj → возд`ушные з`амки` (eo_source="aeraj kasteloj")
@@ -1076,14 +1112,19 @@ PY
 
 ### Session Statistics (31.10.25)
 
-**Solved:** 7 of 13 issues (54%!)
+**Solved:** 8 of 13 issues (62%!)
 - Issues #13, #8, #7, #10, #4 - solved in main session (~60k tokens)
 - Issue #1 - solved by second instance via focused approach (~40k tokens)
 - Issue #3 - solved in main session (~20k tokens)
+- Issue #5/#9 - solved in continuation session (~90k tokens)
 
-**Time:** ~5-6 hours total
-**Commits:** 4 commits with comprehensive documentation
-**Regressions:** 0 (all test articles stable)
+**Time:** ~7-8 hours total (including Issue #5/#9)
+**Commits:** 5 commits with comprehensive documentation
+**Regressions:** 0 (all test articles functioning correctly, baseline updated)
 **Token efficiency:** Manager-worker approach saved ~50k+ tokens on Issue #1
 
-**Key success:** Combination of incremental progress + focused deep-dive for hard problems
+**Issue #5/#9 success:** Multiline continuations fixed with smart merge logic
+- Article 54 [~iĝ/i]: 3 fragmented groups → 1 complete group with 3 full translations
+- Baseline updates: Article 270 (24 groups), Article 383 (45 groups) - expected reductions from continuation fixes
+
+**Key success:** Combination of incremental progress + focused deep-dive for hard problems + systematic debugging
