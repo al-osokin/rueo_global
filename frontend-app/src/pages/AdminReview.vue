@@ -107,6 +107,37 @@
               label="Включать непроверенные"
               dense
             />
+            <div class="text-caption text-grey-7 q-mt-md">Или перегенерить диапазон:</div>
+            <div class="row q-col-gutter-sm">
+              <div class="col-6">
+                <q-input
+                  v-model.number="reparseRangeFrom"
+                  label="С art_id"
+                  type="number"
+                  dense
+                  outlined
+                  :min="1"
+                />
+              </div>
+              <div class="col-6">
+                <q-input
+                  v-model.number="reparseRangeTo"
+                  label="По art_id"
+                  type="number"
+                  dense
+                  outlined
+                  :min="1"
+                />
+              </div>
+            </div>
+            <q-btn
+              color="primary"
+              outline
+              label="Перегенерить все с ... по ..."
+              :loading="reparseRangeLoading"
+              :disable="reparseRangeLoading || !reparseRangeFrom || !reparseRangeTo"
+              @click="reparseRange"
+            />
           </q-card-section>
         </q-card>
         <q-card flat bordered class="q-mt-lg" v-if="article && article.review_notes.length">
@@ -138,7 +169,12 @@
       <div class="col-12 col-md-8">
         <q-card flat bordered v-if="article">
           <q-card-section class="q-gutter-sm">
-            <div class="text-h6">{{ article.headword }}</div>
+            <div class="row items-center q-gutter-sm">
+              <div class="text-h6">{{ article.headword }}</div>
+              <q-chip size="sm" color="grey-4" text-color="grey-8">
+                #{{ article.art_id }}
+              </q-chip>
+            </div>
             <div class="text-caption text-grey-7">
               Шаблон: {{ article.template || '—' }} · Статус: {{ article.parsing_status }}
             </div>
@@ -331,6 +367,10 @@ const suggestions = ref([]);
 const loadingSuggestions = ref(false);
 const selectedArtId = ref(null);
 const directArtId = ref(null);
+
+const reparseRangeFrom = ref(null);
+const reparseRangeTo = ref(null);
+const reparseRangeLoading = ref(false);
 
 const article = ref(null);
 const groups = reactive([]);
@@ -554,6 +594,7 @@ const loadArticle = async (artId, options = {}) => {
     comment.value = "";
     prepareGroups(data);
     selectedArtId.value = null; // Очищаем поле заголовка
+    directArtId.value = data.art_id; // Автозаполнение поля art_id
     updateHistory(artId, options);
   } catch (err) {
     console.error(err);
@@ -693,6 +734,62 @@ const reparseArticles = async () => {
     $q.notify({ type: "negative", message: "Не удалось запустить переразбор" });
   } finally {
     reparseLoading.value = false;
+  }
+};
+
+const reparseRange = async () => {
+  if (reparseRangeLoading.value || !reparseRangeFrom.value || !reparseRangeTo.value) {
+    return;
+  }
+  
+  if (reparseRangeFrom.value > reparseRangeTo.value) {
+    $q.notify({ 
+      type: "warning", 
+      message: "Начальный ID должен быть меньше конечного" 
+    });
+    return;
+  }
+  
+  reparseRangeLoading.value = true;
+  try {
+    // Generate array of art_ids from range
+    const art_ids = [];
+    for (let id = reparseRangeFrom.value; id <= reparseRangeTo.value; id++) {
+      art_ids.push(id);
+    }
+    
+    const payload = { art_ids };  // Backend already supports this!
+    const { data } = await api.post(`/admin/articles/${lang.value}/reparse`, payload);
+    
+    const updated = data?.updated ?? 0;
+    const failed = data?.failed_details ?? [];
+    
+    if (updated) {
+      $q.notify({ 
+        type: "positive", 
+        message: `Переразобрано ${updated} статей из диапазона ${reparseRangeFrom.value}-${reparseRangeTo.value}` 
+      });
+    }
+    if (failed.length) {
+      console.warn("Failed to reparse:", failed);
+      $q.notify({ 
+        type: "warning", 
+        message: `Не удалось переразобрать ${failed.length} статей` 
+      });
+    }
+    
+    // Reload current article if it was in the range
+    if (article.value?.art_id >= reparseRangeFrom.value && 
+        article.value?.art_id <= reparseRangeTo.value) {
+      await loadArticle(article.value.art_id);
+    }
+    
+    await loadStats();
+  } catch (err) {
+    console.error(err);
+    $q.notify({ type: "negative", message: "Не удалось переразобрать диапазон" });
+  } finally {
+    reparseRangeLoading.value = false;
   }
 };
 
