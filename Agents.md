@@ -849,11 +849,36 @@ Also enhanced `text_parser.py` `parse_headword()` to recognize `*N` pattern afte
 **Root cause:** Complex multiline notes with `=` signs and references not properly filtered by legacy parser.
 **Status:** Requires deeper investigation of parser → normalization → review flow. Postponed to focus on other critical issues.
 
-### Issue #2: Complex notes with equals sign - ANALYZED, COMPLEX
-**Problem:** `счёты (_прибор_ = <globkalkulilo>, <bidkalkulilo>);` → остаётся `')japana ~ sorobano'`
-**Root cause:** Legacy parser doesn't handle complex notes with `=` and `<references>` inside. Returns `', )'` as text instead of proper note node.
-**Location:** `parser_v2.0_clean.py` parse_rich_text() - needs enhanced note parsing logic
-**Status:** Requires significant changes to legacy parser. Postponed as it affects DefaultArticleTemplate flow.
+### Issue #2: Complex notes with equals sign - FIXED ✓ (via manager-worker pattern, Phases 1-4)
+**Problem:** Article 10, line 3: `счёты (_прибор_ = <globkalkulilo>, <bidkalkulilo>);`
+- Before: Parser returned garbage `', )'` in content, missing translation group (3 instead of 4)
+- Root cause: Legacy parser's `absorb_parentheses_into_italic()` only looked at immediate next segment for closing `)`, but when `= <ref>` sat between, `)` wasn't captured
+
+**Solution (via manager-worker pattern - Phase 1-4):**
+- Extended `absorb_parentheses_into_italic()` in `parser_v2.0_clean.py` (line 422)
+- Added parentheses balancing logic: scans forward segments character-by-character
+- Consumes text until balance reaches zero (closing `)` found)
+- Guards: stops on punctuation (`;`, `.`) or non-text segments
+- **+59 lines** in one function (minimal, localized fix)
+
+**Tests:**
+- Created `backend/tests/test_parser_v2_complex_notes.py` (80 lines, 5 test cases)
+- All tests passing: simple notes, single ref, multiple refs, minimal repro, Article 10
+
+**Results:**
+- Article 10: ✓ **4 groups** (was 3), 'счёты' present, no ', )' garbage
+- Article 270: ✓ 24 groups (no regression)
+- Article 383: ✓ 45 groups (no regression)
+- Article 54 [~iĝ/i]: ✓ 3 items (Issue #5/#9 still works)
+- Sample reparse (100 articles): ✓ 0 errors
+
+**Location:** 
+- `backend/app/parsing/parser_v2.0_clean.py` lines 422-480 (enhanced forward scan)
+- `backend/tests/test_parser_v2_complex_notes.py` (new test suite)
+
+**Phase 5 (full reparse):** DEFERRED - other issues remain to be fixed first
+
+**Manager-worker pattern:** 4/4 successes! (Issue #1, UI, Issue #12, Issue #2)
 
 ### Issue #1: Grave accent word merging - ANALYZED, ELUSIVE BUG
 **Problem:** `(\`имя) прилаг\`ательное` → `\`имяприлаг\`ательное` (пробел исчезает)
@@ -1151,19 +1176,24 @@ PY
 
 **Lesson:** Always check WHAT DATA STRUCTURE arrives at function, not what you expect!
 
-### Session Statistics (31.10.25)
+### Session Statistics (31.10.25 + 01.11.25)
 
-**Solved:** 9 of 13 issues (69%!)
+**Solved:** 10 of 13 issues (77%!)
 - Issues #13, #8, #7, #10, #4 - solved in main session (~60k tokens)
 - Issue #1 - solved by second instance via focused approach (~40k tokens)
 - Issue #3 - solved in main session (~20k tokens)
 - Issue #5/#9 - solved in continuation session (~90k tokens)
 - Issue #12 - solved by second instance via manager-worker pattern (~10k tokens)
+- Issue #2 - solved by second instance via manager-worker pattern, Phases 1-4 (~15k tokens)
 
-**Time:** ~8-9 hours total (including all fixes)
-**Commits:** 6 commits with comprehensive documentation
+**Remaining issues:** 3 of 13
+- Issue #6: Optional parts (partially fixed)
+- Issue #11: Italic text concatenation (analyzed, postponed)
+
+**Time:** ~11-12 hours total (including all fixes)
+**Commits:** 8 commits with comprehensive documentation
 **Regressions:** 0 (all test articles functioning correctly, baseline updated)
-**Token efficiency:** Manager-worker approach highly effective (3/3 successes)
+**Token efficiency:** Manager-worker approach highly effective (4/4 successes!)
 
 **Issue #5/#9 success:** Multiline continuations fixed with smart merge logic
 - Article 54 [~iĝ/i]: 3 fragmented groups → 1 complete group with 3 full translations
@@ -1174,4 +1204,11 @@ PY
 - Second agent overengineered (+166 lines vs expected 30) but solution is robust
 - Manager-worker pattern: 3/3 successes (Issue #1, UI improvements, Issue #12)
 
-**Key success:** Combination of incremental progress + focused deep-dive for hard problems + systematic debugging + effective delegation
+**Issue #2 success:** Legacy parser complex notes fixed via manager-worker pattern (Phases 1-4)
+- Article 10: 3 groups → 4 groups, 'счёты' translation restored
+- Minimal, localized fix (+59 lines in one function)
+- Comprehensive test suite (80 lines, 5 test cases)
+- Phase 5 (full reparse) deferred - other issues remain
+- Manager-worker pattern: **4/4 successes!** (Issue #1, UI, Issue #12, Issue #2)
+
+**Key success:** Combination of incremental progress + focused deep-dive for hard problems + systematic debugging + effective delegation + phased approach for complex tasks
