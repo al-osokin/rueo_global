@@ -643,6 +643,7 @@ def _collect_groups_from_blocks(
                 _append_note(text)
 
     _flush_buffer()
+    groups = _merge_broken_translation_groups(groups)
     return groups, notes
 
 
@@ -698,8 +699,98 @@ def _build_groups_from_example(
     return groups, notes
 
 
+def _merge_broken_translation_groups(groups: List[TranslationGroup]) -> List[TranslationGroup]:
+    if not groups:
+        return groups
+    merged: List[TranslationGroup] = []
+    skip_next = False
+    for index, group in enumerate(groups):
+        if skip_next:
+            skip_next = False
+            continue
+        if index + 1 < len(groups):
+            candidate = _merge_translation_groups(group, groups[index + 1])
+            if candidate:
+                merged.append(candidate)
+                skip_next = True
+                continue
+        merged.append(group)
+    return merged
+
+
+def _merge_translation_groups(
+    first: TranslationGroup,
+    second: TranslationGroup,
+) -> Optional[TranslationGroup]:
+    if not first.items or not second.items:
+        return None
+
+    merged_phrase = _merge_parenthetical_strings(first.items[0], second.items[0])
+    if not merged_phrase:
+        return None
+
+    remaining_items: List[str] = []
+    if len(first.items) > 1:
+        remaining_items.extend(first.items[1:])
+    if len(second.items) > 1:
+        remaining_items.extend(second.items[1:])
+
+    merged_base_phrase = None
+    if first.base_items and second.base_items:
+        merged_base_phrase = _merge_parenthetical_strings(first.base_items[0], second.base_items[0])
+    base_primary = merged_base_phrase or merged_phrase
+
+    merged_base_items: List[str] = [base_primary]
+    if len(first.base_items) > 1:
+        merged_base_items.extend(first.base_items[1:])
+    if len(second.base_items) > 1:
+        merged_base_items.extend(second.base_items[1:])
+    merged_base_items = _deduplicate(merged_base_items)
+
+    expanded_primary = _expand_parenthetical_forms(merged_phrase)
+    merged_items = _deduplicate(expanded_primary + remaining_items)
+
+    combined_group = TranslationGroup(
+        items=list(merged_items),
+        label=first.label,
+        requires_review=first.requires_review or second.requires_review,
+        base_items=list(merged_base_items),
+        auto_generated=True,
+        section=first.section or second.section,
+        candidates=_build_translation_candidates(merged_base_items, merged_items),
+        eo_source=first.eo_source or second.eo_source,
+    )
+    _select_candidate(combined_group, None)
+    return combined_group
+
+
+def _merge_parenthetical_strings(first: str, second: str) -> Optional[str]:
+    if not first or not second:
+        return None
+    if not _has_unclosed_parenthesis(first):
+        return None
+    if ")" not in second:
+        return None
+    before_close, after_close = second.split(")", 1)
+    variant = before_close.strip()
+    if not variant:
+        return None
+    tail = after_close
+    connector = _detect_parenthetical_connector(first)
+    prefix_clean = first.rstrip(" ,")
+    return _clean_spacing(f"{prefix_clean}, {connector} {variant}){tail}")
+
+
+def _detect_parenthetical_connector(text: str) -> str:
+    normalized = _strip_accents(text).lower()
+    if "либо" in normalized:
+        return "либо"
+    return "или"
+
+
 def _extract_label(content: Iterable[Dict]) -> Optional[str]:
     pieces: List[str] = []
+    content = list(content)
     for node in content:
         if node.get("type") == "label":
             text = node.get("text")
@@ -1794,16 +1885,70 @@ class _PhraseBuilder:
         else:
             self._append_component(normalized.rstrip(".,:"))
 
-    def add_alternatives(self, alternatives: Sequence[str]) -> None:
-        options = [_clean_spacing(option) for option in alternatives if _clean_spacing(option)]
-        if not options:
+    def add_alternatives(self, options: Sequence[str]) -> None:
+        """
+        Adds alternatives from note (_или_ pattern).
+
+        CRITICAL: If last component has a word, that word is the FIRST variant
+        that these alternatives replace. Include it in the alternatives list.
+
+        Example:
+            Before: components = [['отложительный']]
+            Call: add_alternatives(['отделительный', 'исходный'])
+            After: components = [['отложительный', 'отделительный', 'исходный']]
+        """
+        prepared = [
+            _clean_spacing(option)
+            for option in options
+            if _clean_spacing(option)
+        ]
+        if not prepared:
             return
+
+        # Check if we have a word BEFORE the note (last component, last word)
+        if self.components and self.components[-1]:
+            last_component = self.components[-1]
+
+            # Last component should have one option (the word before note)
+            if last_component and len(last_component) == 1:
+                first_variant = _clean_spacing(last_component[0])
+
+                # Extract last substantive token (ignore parentheses/punctuation)
+                matches = list(re.finditer(r"[^\s()[\]{};,/:]+", first_variant))
+                if matches:
+                    last_token_match = matches[-1]
+                    first_variant_word = last_token_match.group(0)
+                    prefix = first_variant[: last_token_match.start()].rstrip()
+                    suffix = first_variant[last_token_match.end():].strip()
+
+                    # Add the original word as the first alternative
+                    alternatives = [first_variant_word, *prepared]
+
+                    # Prepare remaining text (excluding bare parentheses) to keep as component
+                    remainder_parts: List[str] = []
+                    if prefix:
+                        remainder_parts.append(prefix)
+                    if suffix and suffix.strip("([{"):
+                        remainder_parts.append(suffix)
+
+                    if remainder_parts:
+                        self.components[-1] = [_clean_spacing(" ".join(remainder_parts))]
+                    else:
+                        # No text left, remove component
+                        self.components.pop()
+
+                    # Add all alternatives as new component
+                    self.components.append(alternatives)
+                    return
+
+        # Fallback to extending the last component with inherited prefixes
         if not self.components:
-            self.components.append(list(options))
+            self.components.append(list(prepared))
             return
+
         base_options = self.components[-1]
-        seen = {opt for opt in base_options}
-        for option in options:
+        seen = {option for option in base_options}
+        for option in prepared:
             enriched = _inherit_prose_prefix(base_options, option)
             if enriched not in seen:
                 base_options.append(enriched)
@@ -1952,6 +2097,21 @@ def _extract_translation_from_explanation(content: Iterable[Dict]) -> Tuple[List
             if style == "italic":
                 cleaned_note = _clean_spacing(raw_text.replace("_", " "))
                 cleaned_note = cleaned_note.strip("()")
+                if cleaned_note and translation_nodes:
+                    last_node = translation_nodes[-1]
+                    if (
+                        last_node.get("type") == "text"
+                        and _has_unclosed_parenthesis(last_node.get("text", ""))
+                        and any(keyword in cleaned_note.lower() for keyword in ("или", "либо", "/"))
+                    ):
+                        translation_nodes.append(
+                            {
+                                "type": "note",
+                                "text": cleaned_note,
+                            }
+                        )
+                        pending_parenthesis_close = True
+                        continue
                 if cleaned_note and _attach_to_previous(cleaned_note):
                     continue
                 if cleaned_note:
