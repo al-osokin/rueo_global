@@ -437,6 +437,65 @@ def absorb_parentheses_into_italic(content: List[Dict[str, Any]]) -> List[Dict[s
                         content.pop(i + 1)
                     continue
 
+        # Дополнительный просмотр вперёд: ищем закрывающую скобку дальше,
+        # если текущий курсивный сегмент содержит незакрытый блок.
+        balance = 0
+        for ch in segment.get('text', ''):
+            if ch == '(':
+                balance += 1
+            elif ch == ')':
+                balance -= 1
+
+        if balance > 0:
+            j = i + 1
+            while balance > 0 and j < len(content):
+                next_seg = content[j]
+                if next_seg.get('type') != 'text' or next_seg.get('style') == 'italic':
+                    break
+
+                next_text = next_seg.get('text', '')
+                if not next_text:
+                    content.pop(j)
+                    continue
+
+                consumed = 0
+                stop_due_to_punct = False
+
+                while consumed < len(next_text):
+                    ch = next_text[consumed]
+                    if ch in {';', '.'} and balance > 0:
+                        stop_due_to_punct = True
+                        break
+
+                    segment['text'] += ch
+                    consumed += 1
+
+                    if ch == '(':
+                        balance += 1
+                    elif ch == ')':
+                        balance -= 1
+                        if balance == 0:
+                            break
+
+                if consumed == 0:
+                    break
+
+                if consumed < len(next_text):
+                    next_seg['text'] = next_text[consumed:]
+                else:
+                    content.pop(j)
+
+                if balance <= 0:
+                    # Закрывающая скобка найдена – переходим к повторной проверке сегмента
+                    break
+
+                if stop_due_to_punct:
+                    break
+
+            if balance <= 0:
+                # Повторно обработаем сегмент после расширения
+                continue
+
         i += 1
 
     return content
@@ -1094,7 +1153,13 @@ def classify_node(node: Dict, in_note_context: bool = False) -> Dict:
         # Проверяем, является ли это примером (содержит ~ перед латинской буквой)
         stripped_text = text.strip()
         # Паттерн ~letter указывает на использование корня в примере
-        is_example = stripped_text.startswith('~') or re.search(r'~[a-zA-Z]', stripped_text)
+        # Также учитываем случаи вида "japana ~ _см._ <sorobano>" (tilde перед пробелом/курсивом)
+        is_example = (
+            stripped_text.startswith('~')
+            or re.search(r'~[a-zA-Z]', stripped_text)
+            or re.search(r'~\s', stripped_text)
+            or re.search(r'~[_<]', stripped_text)
+        )
         if is_example:
             # Это иллюстрация (пример)
             result['type'] = 'illustration'
@@ -1561,11 +1626,16 @@ def parse_illustration(text: str, preserve_punctuation: bool = False) -> Dict:
             result['eo'] = eo_part
             ru_parts = parse_rich_text(ru_part, preserve_punctuation=False)
             ru_segments = split_ru_segments(ru_parts)
-            result['ru_segments'] = ru_segments if ru_segments else [{'text': ru_part, 'kind': 'term'}]
-            divider_kinds = {seg['kind'] for seg in result['ru_segments'] if 'divider' in seg['kind']}
-            if 'near_divider' in divider_kinds and 'far_divider' in divider_kinds:
-                result['ru_requires_review'] = True
-            result.pop('content', None)
+            has_meaningful_terms = any(seg.get('kind') == 'term' for seg in ru_segments)
+            if has_meaningful_terms:
+                result['ru_segments'] = ru_segments
+                divider_kinds = {seg['kind'] for seg in result['ru_segments'] if 'divider' in seg['kind']}
+                if 'near_divider' in divider_kinds and 'far_divider' in divider_kinds:
+                    result['ru_requires_review'] = True
+                result.pop('content', None)
+            else:
+                if ru_segments:
+                    result.setdefault('meta', {})['ru_reference_segments'] = ru_segments
     else:
         ru_part = text.strip()
 
