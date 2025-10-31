@@ -219,6 +219,7 @@ def search_articles(
 def next_article(
     lang: str,
     after: Optional[int] = Query(None),
+    before: Optional[int] = Query(None),
     mode: str = Query("next"),
     session=Depends(get_session),
 ):
@@ -226,6 +227,8 @@ def next_article(
     service = ArticleReviewService(session)
     if mode == "spotcheck":
         return service.get_queue_item(lang, status="reviewed", random=True)
+    if mode == "prev":
+        return service.get_queue_item(lang, status="needs_review", before=before)
     return service.get_queue_item(lang, status="needs_review", after=after)
 
 

@@ -96,6 +96,7 @@ class ArticleReviewService:
         *,
         status: str = "needs_review",
         after: Optional[int] = None,
+        before: Optional[int] = None,
         random: bool = False,
     ) -> Optional[Dict[str, Any]]:
         stmt = select(
@@ -117,6 +118,18 @@ class ArticleReviewService:
                 "headword": headword,
                 "parsing_status": parsing_status,
             }
+
+        if before is not None:
+            stmt_before = stmt.where(ArticleParseState.art_id < before).order_by(ArticleParseState.art_id.desc()).limit(1)
+            row_before = self.session.execute(stmt_before).first()
+            if row_before:
+                art_id, headword, parsing_status = row_before
+                return {
+                    "art_id": art_id,
+                    "headword": headword,
+                    "parsing_status": parsing_status,
+                }
+            return None
 
         if after is not None:
             stmt_after = stmt.where(ArticleParseState.art_id > after).order_by(ArticleParseState.art_id).limit(1)

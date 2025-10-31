@@ -67,6 +67,7 @@
               dense
               outlined
               clearable
+              @keyup.enter="() => directArtId && loadArticle(directArtId)"
             >
               <template #append>
                 <q-btn
@@ -79,14 +80,6 @@
               </template>
             </q-input>
             <div class="row q-gutter-sm">
-              <q-btn
-                color="primary"
-                outline
-                label="Следующая проблемная"
-                icon="fact_check"
-                :disable="saving"
-                @click="() => loadNextPending(article ? article.art_id : null)"
-              />
               <q-btn
                 color="secondary"
                 outline
@@ -272,22 +265,39 @@
               :disable="saving"
             />
           </q-card-section>
-          <q-card-actions align="between">
+          <q-card-actions align="between" class="q-gutter-sm">
+            <q-btn
+              color="red"
+              outline
+              icon="first_page"
+              label="ПРЕД. ПРОБЛ."
+              :disable="saving"
+              @click="saveAndGo('prev-problematic')"
+            />
             <q-btn
               color="primary"
               outline
               icon="chevron_left"
-              label="Назад"
-              :disable="saving || !canGoBack"
-              @click="saveAndGo('prev')"
+              label="НАЗАД"
+              :disable="saving || !canGoPrevById"
+              @click="saveAndGo('prev-id')"
             />
             <q-btn
               color="primary"
+              outline
               icon-right="chevron_right"
-              label="Дальше"
+              label="ВПЕРЁД"
               :loading="saving"
               :disable="saving"
-              @click="saveAndGo('next')"
+              @click="saveAndGo('next-id')"
+            />
+            <q-btn
+              color="red"
+              outline
+              icon-right="last_page"
+              label="СЛЕД. ПРОБЛ."
+              :disable="saving"
+              @click="saveAndGo('next-problematic')"
             />
           </q-card-actions>
         </q-card>
@@ -335,6 +345,7 @@ const reparseLoading = ref(false);
 const reparseCurrentLoading = ref(false);
 
 const canGoBack = computed(() => historyIndex.value > 0);
+const canGoPrevById = computed(() => article.value && article.value.art_id > 1);
 
 const formatDate = (value) => {
   if (!value) return "";
@@ -542,7 +553,7 @@ const loadArticle = async (artId, options = {}) => {
     article.value = data;
     comment.value = "";
     prepareGroups(data);
-    selectedArtId.value = artId;
+    selectedArtId.value = null; // Очищаем поле заголовка
     updateHistory(artId, options);
   } catch (err) {
     console.error(err);
@@ -592,6 +603,38 @@ const loadNextPending = async (afterId = null) => {
     console.error(err);
     $q.notify({ type: "negative", message: "Не удалось получить следующую статью" });
   }
+};
+
+const loadPrevProblematic = async (beforeId = null) => {
+  try {
+    const params = { mode: "prev" };
+    if (beforeId != null) {
+      params.before = beforeId;
+    }
+    const { data } = await api.get(`/admin/articles/${lang.value}/queue`, {
+      params,
+    });
+    if (data?.art_id) {
+      await loadArticle(data.art_id);
+    } else {
+      $q.notify({ type: "info", message: "Нет предыдущих проблемных статей" });
+    }
+  } catch (err) {
+    console.error(err);
+    $q.notify({ type: "negative", message: "Не удалось получить предыдущую статью" });
+  }
+};
+
+const loadNextById = async () => {
+  if (!article.value) return;
+  const nextId = article.value.art_id + 1;
+  await loadArticle(nextId);
+};
+
+const loadPrevById = async () => {
+  if (!article.value || article.value.art_id <= 1) return;
+  const prevId = article.value.art_id - 1;
+  await loadArticle(prevId);
 };
 
 const resetArticle = async () => {
@@ -704,12 +747,8 @@ const loadSpotCheck = async () => {
   }
 };
 
-const saveAndGo = async (direction = "next") => {
+const saveAndGo = async (direction = "next-problematic") => {
   if (!article.value) {
-    return;
-  }
-
-  if (direction === "prev" && historyIndex.value <= 0) {
     return;
   }
 
@@ -725,17 +764,25 @@ const saveAndGo = async (direction = "next") => {
     $q.notify({ type: "positive", message: "Сохранено" });
     comment.value = "";
     await loadStats();
-    if (direction === "prev") {
-      const targetIndex = historyIndex.value - 1;
-      const prevId = history.value[targetIndex];
-      if (prevId !== undefined) {
-        await loadArticle(prevId, { fromHistory: true, historyPosition: targetIndex });
-      }
-      return;
-    }
 
-    if (direction === "next") {
-      await loadNextPending(article.value?.art_id || null);
+    const currentId = article.value?.art_id;
+    
+    switch (direction) {
+      case "prev-problematic":
+        await loadPrevProblematic(currentId);
+        break;
+      case "prev-id":
+        await loadPrevById();
+        break;
+      case "next-id":
+        await loadNextById();
+        break;
+      case "next-problematic":
+      case "next":
+        await loadNextPending(currentId);
+        break;
+      default:
+        break;
     }
   } catch (err) {
     console.error(err);
