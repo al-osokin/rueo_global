@@ -925,14 +925,19 @@ Also enhanced `text_parser.py` `parse_headword()` to recognize `*N` pattern afte
 **Root Cause:** Function `_compress_optional_prefix_spacing()` was designed to remove spaces after short optional prefixes like `(воз)действие`, but incorrectly applied to grave-marked words. The function checks if optional parts are ≤4 characters; `\`имя` is 4 characters and qualified for space removal.
 **Solution:** Added check in `_should_collapse()` to preserve spaces when grave accents (backticks) are present:
 ```python
-if "`" in candidate:
-    return False
+def _should_collapse(candidate: str) -> bool:
+    if not candidate:
+        return False
+    # Don't collapse if contains grave accent - stress marks need space preserved  
+    if "`" in candidate:
+        return False
+    # ... rest of checks
 ```
 **Test:**
-- Article 2: `['прилагательное', '\`имя прилагательное']` WITH space ✓
-- Article 270: 25 groups (no regression) ✓
-- Article 383: 48 groups (no regression) ✓
-**Location:** `translation_review.py` lines 2491-2493
+- Article 2: Now shows `['прилагательное', '\`имя прилагательное']` WITH space ✓
+- Article 270: Still 25 groups (no regression) ✓
+- Article 383: Still 48 groups (no regression) ✓
+**Location:** `translation_review.py` lines 2491-2493 (_should_collapse in _compress_optional_prefix_spacing)
 **Credit:** Fixed by second Droid instance in focused debugging session
 
 ### Issue #6: Optional parts after words - PARTIALLY FIXED ⚠️

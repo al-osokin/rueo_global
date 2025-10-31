@@ -2488,6 +2488,9 @@ def _compress_optional_prefix_spacing(value: str) -> str:
     def _should_collapse(candidate: str) -> bool:
         if not candidate:
             return False
+        # Don't collapse if contains grave accent - these are stress marks, need space preserved
+        if "`" in candidate:
+            return False
         normalized = _strip_accents(candidate).lower()
         if any(char in candidate for char in " ,.;:/"):
             return False
