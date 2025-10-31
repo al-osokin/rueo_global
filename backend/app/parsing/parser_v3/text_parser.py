@@ -285,10 +285,22 @@ def parse_headword(line: str) -> Tuple[Optional[Dict[str, Any]], str]:
     official_mark = None
     homonym = None
     
-    # Проверка на официальную отметку *
+    # Проверка на официальную отметку * (внутри скобок)
     if inside.startswith('*'):
         official_mark = True
         inside = inside[1:].lstrip()
+    
+    # Проверка на официальную отметку *N после скобки (например, [abnegacio] *2)
+    if remainder.startswith('*'):
+        mark_match = re.match(r'^\*(\d+)', remainder)
+        if mark_match:
+            # Сохраняем полную метку с номером (например, "*2")
+            official_mark = f"*{mark_match.group(1)}"
+            remainder = remainder[len(mark_match.group(0)):].lstrip()
+        else:
+            # Просто звёздочка без номера
+            official_mark = True
+            remainder = remainder[1:].lstrip()
     
     # Проверка на номер омонима (цифра после пробела в конце)
     homonym_match = re.search(r'\s+(\d+)$', inside)

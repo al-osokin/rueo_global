@@ -831,6 +831,111 @@ Not parser issues, but review logic:
 - **Статья 365** (aer/trafik/o): regression testing (4 groups)
 - **Статья 383** (afekt/i): regression testing (53 groups)
 
+## PHASE 1 Progress: Text parser fixes (31.10.25)
+
+### Issue #13: Official marks with numbers - FIXED ✓
+**Problem:** `[abnegacio] *2 самоотв\`ерженность` → цифра `2` попадала в текст перевода
+**Solution:** Added filtering in `translation_review.py` `_apply_source_fallback()`:
+```python
+# Удаляем метки официальности (*N) из начала строки
+line = re.sub(r'^\s*\*\d*\s*', ' ', line)
+```
+Also enhanced `text_parser.py` `parse_headword()` to recognize `*N` pattern after bracket.
+**Test:** Article 58 now correctly shows `официальная_метка='OA2'` without `2` in translation text.
+
+### Issue #11: Italic text in translations - PARTIALLY ANALYZED
+**Problem:** `иссеч\`ение, удал\`ение (_ткани, члена или органа_)` → получается `удал\`ениеили органа ср`
+**Analysis:** Problem occurs in `_split_translation_groups()` BEFORE fallback is called. Italic notes are being concatenated with translation text during parsing/normalization phase.
+**Root cause:** Complex multiline notes with `=` signs and references not properly filtered by legacy parser.
+**Status:** Requires deeper investigation of parser → normalization → review flow. Postponed to focus on other critical issues.
+
+### Issue #2: Complex notes with equals sign - ANALYZED, COMPLEX
+**Problem:** `счёты (_прибор_ = <globkalkulilo>, <bidkalkulilo>);` → остаётся `')japana ~ sorobano'`
+**Root cause:** Legacy parser doesn't handle complex notes with `=` and `<references>` inside. Returns `', )'` as text instead of proper note node.
+**Location:** `parser_v2.0_clean.py` parse_rich_text() - needs enhanced note parsing logic
+**Status:** Requires significant changes to legacy parser. Postponed as it affects DefaultArticleTemplate flow.
+
+### Issue #1: Grave accent word merging - ANALYZED, ELUSIVE BUG
+**Problem:** `(\`имя) прилаг\`ательное` → `\`имяприлаг\`ательное` (пробел исчезает)
+**Deep investigation:** 
+- `_expand_parenthetical_forms()` works correctly: returns `'\`имя прилаг\`ательное'` WITH space
+- `_clean_spacing()`, `_normalize_compound_terms()` preserve space
+- Problem occurs somewhere in pipeline AFTER expansion but BEFORE final group items
+- Parser correctly returns `'(\`имя) прилаг\`ательное'` (before expansion)
+**Status:** Complex bug, requires systematic tracing through entire _split_translation_groups() → _expand_cross_product() → final items flow. Likely in some edge case handling or character-level processing. **POSTPONED** due to complexity and token budget.
+
+### Issue #3: Leading adjectives expansion - ANALYZED, NEEDS NEW LOGIC
+**Problem:** `брюшн`ой, з`адний плавн`ик` → should be `брюшн`ой плавн`ик | з`адний плавн`ик`
+**Current behavior:** `_split_leading_adjectives()` only works for label='т.е.' (то есть)
+**Root cause:** Need to detect pattern "adj1, adj2 noun" and expand BEFORE expansion pipeline
+**Location:** Should be in normalization.py or early in translation_review.py
+**Status:** Requires new pattern matching logic. _expand_cross_product() doesn't handle this case (different suffixes).
+
+### Issue #8: Reference filtering - FIXED ✓
+**Problem:** `_ср._ <Etiopio>` создавал группу с единственным элементом `'<'`
+**Solution:** 
+1. Enhanced `_is_pure_reference_segment()` to filter `;` and `.` punctuation
+2. Added `_strip_reference_suffix()` to remove `_ср._ <...>` from line endings in `_apply_source_fallback()`
+3. Added filtering in `_extract_translation_from_explanation()` to skip pure reference text nodes like `<Etiopio>.`
+**Test:** 
+- Article 52: Now has 1 group (was 2), no ghost `'<'` group
+- Article 270: Still 25 groups, section `[~um/i]` has 2 translations (no ghost `<ventumi>` reference)
+**Location:** `translation_review.py` lines 1327-1362, 1091-1092, 1855-1860
+
+### Issue #7: "Как в источнике" candidate - FIXED ✓
+**Problem:** Кандидат "Как в источнике" показывал раскрытые варианты (с раскрытыми скобками), должен показывать простой split по `,` и `;`
+**Solution:**
+1. Added `_split_inline_synonyms_simple()` - splits by commas WITHOUT expanding parentheses
+2. Changed `base_clean` processing to use `_split_inline_synonyms_simple()` instead of `_expand_inline_synonyms_list()`
+3. `expanded_clean` still uses full expansion with `_expand_inline_synonyms_list()`
+**Test:**
+- Article 39 `[~i]`: "Как в источнике" shows `['аберр\`ировать', 'дав\`ать аберр\`ацию']` (simple split)
+- Article 39 numbered value 2: base_items = `['аберр\`ация', 'отклон\`ение']` WITHOUT `(от нормы)` expansion
+- Article 270: 25 groups, no regressions
+**Location:** `translation_review.py` lines 1041-1053 (new function), 824-827 (usage)
+
+### Issue #10: Reference-only articles creating empty groups - FIXED ✓
+**Problem:** Articles containing only references (e.g., `1. _см._ <malagnoski>; 2. _см._ <forjxuri>`) created empty groups with content like `['1']` (numbered value only)
+**Solution:**
+1. Added `_is_reference_only_block()` function to detect blocks with only references
+2. Checks that content contains only digits/dividers and all children are reference/explanation nodes
+3. Skip such blocks before processing in `_collect_groups_from_blocks()`
+**Test:**
+- Article 55: Now has 0 groups (was 1 with `['1']`)
+- Article 270: Still 25 groups, no regressions
+- Article 383: 48 groups (unchanged from previous fixes)
+**Location:** `translation_review.py` lines 321-352 (new function), 462-464 (usage)
+
+### Issue #4: Tilde examples filtering - FIXED ✓
+**Problem:** Examples with tilde (Esperanto text) mixed with translations, e.g., `"`улей ~ujo"`, `"`улей natura ~ujo"` in article 23, or broken references like `"см.tifoido"` in article 19
+**Solution:**
+1. Enhanced `_is_meaningful_item()` to filter items containing `~` (tilde marker for Esperanto examples)
+2. Added filtering for broken references starting with `"см."` or `"ср."` without proper spacing
+3. Added check in `_collect_groups_from_blocks()` to skip groups with no meaningful items after filtering
+**Test:**
+- Article 23 `[~uj/o]`: Now has 0 groups (was 1 with tilde text), total 11 groups (was 12)
+- Article 19: Group `~a tifo` now has `['tifoida febro']` only (filtered out `'см.tifoido'`), 8 groups total
+- Article 270: Still 25 groups, no regressions
+- Article 383: Still 48 groups, no regressions
+**Location:** `translation_review.py` lines 2440-2447 (_is_meaningful_item), 288-293 (group filtering)
+**Note:** This is a post-processing fix. Root cause is in parser concatenating tilde text with translations. Full fix would require parser changes in templates.py.
+
+### Issue #6: Optional parts after words - PARTIALLY FIXED ⚠️
+**Problem:** `отклонение (от нормы)` lost closing parenthesis, becoming `отклонение (от нормы` (article 39)
+**Solution implemented:**
+1. Fixed `_strip_trailing_punctuation()` to preserve balanced parentheses (lines 2399-2416)
+   - Only strips trailing `)` if parentheses are unbalanced
+   - Preserves balanced pairs like `"слово (пояснение)"`
+2. Enhanced `_expand_parenthetical_forms()` to generate BOTH variants for complex optional parts (lines 2101-2119)
+   - When optional part has spaces/commas inside (e.g., `(от нормы)`), now returns both: `['отклонение', 'отклонение (от нормы)']`
+   - Previously only returned variant WITH parentheses
+**Test:**
+- Article 270: Still 25 groups (no regressions)
+- Article 383: Still 48 groups (no regressions)
+- Article 39: Closing parenthesis no longer lost ✓
+**Status:** Parentheses preservation works, BUT candidate generation needs additional work to properly show expanded variants in UI
+**Location:** `translation_review.py` lines 2399-2416 (_strip_trailing_punctuation), 2101-2119 (_expand_parenthetical_forms)
+
 ## Quick reference: test article 270
 
 Article 270 (`[aer|o]`) is used for testing parser fixes. Expected structure after latest fixes:

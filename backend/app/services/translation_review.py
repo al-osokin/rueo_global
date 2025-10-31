@@ -284,6 +284,13 @@ def _collect_groups_from_blocks(
                 stripped = base_item.strip()
                 if _is_meaningful_item(stripped):
                     cleaned_base.append(stripped)
+            
+            # Также фильтруем items с тильдой
+            items = [item for item in items if _is_meaningful_item(item)]
+            
+            # Пропускаем группы без meaningful items
+            if not items:
+                continue
 
             if label and label.strip().lower().startswith("т.е"):
                 items = _split_leading_adjectives(items)
@@ -317,6 +324,39 @@ def _collect_groups_from_blocks(
         buffer_requires_review = False
         buffer_continues = False
         pending_suffixes = []
+
+    def _is_reference_only_block(block: Dict) -> bool:
+        """
+        Проверяет, содержит ли блок только отсылки без переводов.
+        Например: "1. _см._ <malagnoski>; 2. _см._ <forjxuri>"
+        """
+        content = block.get("content") or []
+        children = block.get("children") or []
+        
+        # Проверяем content - должен содержать только номер и разделители
+        has_meaningful_text = False
+        for node in content:
+            if node.get("type") == "text":
+                text = (node.get("text") or "").strip()
+                # Пропускаем номера значений (1, 2, ...) и пустой текст
+                if text and not text.isdigit():
+                    has_meaningful_text = True
+                    break
+        
+        if has_meaningful_text:
+            return False
+        
+        # Проверяем children - все должны быть reference или пустые
+        if not children:
+            # Если нет детей И нет meaningful text - это пустой блок
+            return True
+        
+        for child in children:
+            child_type = child.get("type")
+            if child_type not in ("reference", "explanation"):
+                return False
+        
+        return True
 
     for block in blocks or []:
         block_type = block.get("type")
@@ -426,6 +466,10 @@ def _collect_groups_from_blocks(
             continue
 
         if block_type == "translation" or (block_type == "illustration" and not block.get("eo")):
+            # Пропускаем блоки, содержащие только отсылки (reference-only)
+            if _is_reference_only_block(block):
+                continue
+            
             block_number = block.get("number")
             if buffer_content and block_number is not None:
                 _flush_buffer()
@@ -743,6 +787,7 @@ def _split_translation_groups(
             base_groups.append(_deduplicate(current_group))
             current_group = []
 
+
     for node in content:
         node_type = node.get("type")
         if node_type == "label":
@@ -820,7 +865,9 @@ def _split_translation_groups(
         base_clean, base_notes = _sanitize_spec_values(original_base)
         expanded_clean, expanded_notes = _sanitize_spec_values(original_expanded)
 
-        base_clean = _expand_inline_synonyms_list(base_clean)
+        # base_clean НЕ раскрываем скобки - просто split по запятым для "Как в источнике"
+        base_clean = _split_inline_synonyms_simple(base_clean)
+        # expanded раскрываем полностью
         expanded_clean = _expand_inline_synonyms_list(expanded_clean or base_clean)
 
         for note in (*base_notes, *expanded_notes):
@@ -1037,6 +1084,21 @@ def _expand_inline_synonyms_list(items: List[str]) -> List[str]:
     return _deduplicate(expanded)
 
 
+def _split_inline_synonyms_simple(items: List[str]) -> List[str]:
+    """
+    Разбивает синонимы по запятым БЕЗ раскрытия скобок.
+    Используется для кандидата 'Как в источнике'.
+    Например: 'аберрация, отклонение (от нормы)' -> ['аберрация', 'отклонение (от нормы)']
+    """
+    result: List[str] = []
+    for item in items:
+        for chunk in _split_inline_synonyms(item):
+            cleaned = _clean_spacing(chunk)
+            if cleaned:
+                result.append(cleaned)
+    return _deduplicate(result)
+
+
 def _apply_source_fallback(
     specs: List[Dict[str, List[str]]],
     content: Iterable[Dict],
@@ -1051,6 +1113,7 @@ def _apply_source_fallback(
     if not section_lines:
         return specs, extra_notes
     
+
     # Если content содержит только простой текст (один text node без dividers),
     # не применяем fallback - это простой заголовочный перевод
     content_list = list(content)
@@ -1082,28 +1145,38 @@ def _apply_source_fallback(
         if not line.strip():
             continue
         
-        # Если строка - numbered value (1., 2., ...), пропускаем её и всё до следующего ;
-        if _is_example_line(line):
-            # Сохраняем предыдущую группу
-            if current_group and not is_example_group and not skip_until_semicolon:
-                result_groups.append(' '.join(current_group))
-            current_group = []
-            
-            # Если это numbered value, пропускаем всё до ;
-            stripped = line.strip()
-            if re.match(r'^\*?\s*\d+\.', stripped):
-                skip_until_semicolon = True
-                is_example_group = False
-            else:
-                # Это example с ~ или латинскими буквами
-                is_example_group = True
-                skip_until_semicolon = False
-            continue
+        # Удаляем метки официальности (*N) из начала строки
+        # Например: " *2 самоотв`ерженность" -> " самоотв`ерженность"
+        line = re.sub(r'^\s*\*\d*\s*', ' ', line)
         
+        # Удаляем отсылки '_ср._ <...>' из конца строки
+        line = _strip_reference_suffix(line)
+        
+        # ВАЖНО: Сначала проверяем skip_until_semicolon (для continuation lines после numbered values)
         # Если мы в режиме пропуска (после numbered value), пропускаем всё до ;
         if skip_until_semicolon:
             if line.rstrip().endswith(';'):
                 skip_until_semicolon = False
+            continue
+        
+        # Если строка - numbered value (1., 2., ...), начинаем пропускать всё до ;
+        stripped = line.strip()
+        if re.match(r'^\*?\s*\d+\.', stripped):
+            # Сохраняем предыдущую группу
+            if current_group and not is_example_group:
+                result_groups.append(' '.join(current_group))
+            current_group = []
+            skip_until_semicolon = True
+            is_example_group = False
+            continue
+        
+        # Если строка - example (с ~ или латинскими буквами), пропускаем
+        if _is_example_line(line):
+            # Сохраняем предыдущую группу
+            if current_group and not is_example_group:
+                result_groups.append(' '.join(current_group))
+            current_group = []
+            is_example_group = True
             continue
         
         # Если строка начинается с ~, начинается новая группа-пример
@@ -1333,11 +1406,24 @@ def _is_pure_reference_segment(text: str) -> bool:
     # Должны остаться только ссылки <...> и разделители
     # Убираем все ссылки вида <что-то>
     without_refs = re.sub(r'<[^>]+>', '', rest)
-    # Убираем запятые и пробелы
-    without_refs = without_refs.replace(',', '').replace(' ', '').strip()
+    # Убираем запятые, точки с запятой, точки и пробелы
+    without_refs = without_refs.replace(',', '').replace(';', '').replace('.', '').replace(' ', '').strip()
     
     # Если ничего не осталось - это чистая ссылка
     return len(without_refs) == 0
+
+
+def _strip_reference_suffix(text: str) -> str:
+    """
+    Удаляет отсылки типа '_ср._ <...>' из конца текста.
+    Например: 'Абисс`иния (_устаревшее название Эфиопии_); _ср._ <Etiopio>.' 
+    -> 'Абисс`иния (_устаревшее название Эфиопии_)'
+    """
+    # Паттерн: _ср._ или _см._ + ссылки <...> с разделителями до конца строки
+    # Ищем от конца: опциональная точка + пробелы + ссылки + пробелы + ср./см. + underscore
+    pattern = r'[;\s]*_(?:ср|см)\._\s*(?:<[^>]+>(?:\s*,\s*<[^>]+>)*)\s*\.?\s*$'
+    cleaned = re.sub(pattern, '', text)
+    return cleaned.rstrip(';').strip()
 
 
 def _remove_reference_suffix(value: str) -> Tuple[str, List[str]]:
@@ -1827,6 +1913,13 @@ def _extract_translation_from_explanation(content: Iterable[Dict]) -> Tuple[List
                     normalized = f"{leading_ws})"
                 raw_text = normalized
                 pending_parenthesis_close = False
+            
+            # Пропускаем чистые ссылки типа "<Etiopio>", которые не переводы
+            # Они остаются после отсылок "_ср._ <...>"
+            cleaned_check = raw_text.strip().lstrip(';').strip()
+            if cleaned_check and re.match(r'^<[^>]+>\.?$', cleaned_check):
+                continue
+            
             translation_nodes.append(
                 {
                     "type": "text",
@@ -1899,6 +1992,7 @@ def _clone_nodes(nodes: Iterable[Dict]) -> List[Dict]:
 def _expand_parenthetical_forms(phrase: str) -> List[str]:
     phrase = phrase.replace("_", " ")
     
+
     # Защита от бесконечной рекурсии
     MAX_DEPTH = 50
     seen_texts = set()
@@ -2004,8 +2098,25 @@ def _expand_parenthetical_forms(phrase: str) -> List[str]:
                 (",", ";", ":", ".", ")", "—", "-", "‑")
             ) else " "
 
-        preserved = f"{preserved_before}({inside_clean}){joiner}{preserved_after or ''}"
-        return _recurse(preserved, depth + 1)
+        # Создаём вариант СО скобками (с пробелом перед скобкой)
+        with_parens = f"{preserved_before}({inside_clean}){joiner}{preserved_after or ''}"
+        
+        # Создаём вариант БЕЗ скобок (опциональная часть убирается)
+        before_trimmed = before.rstrip()
+        after_trimmed = after.lstrip()
+        needs_space = (
+            bool(before_trimmed)
+            and bool(after_trimmed)
+            and not before_trimmed.endswith((" ", "-", "—", "‑", "/"))
+            and not after_trimmed.startswith((",", ";", ":", ".", ")", "—", "-", "‑"))
+        )
+        if needs_space:
+            without_parens = f"{before_trimmed} {after_trimmed}"
+        else:
+            without_parens = before_trimmed + after_trimmed
+        
+        # Возвращаем оба варианта
+        return _recurse(without_parens, depth + 1) + _recurse(with_parens, depth + 1)
 
     return _deduplicate([_clean_spacing(item) for item in _recurse(phrase)])
 
@@ -2303,7 +2414,23 @@ def _looks_like_verb(text: str) -> bool:
 
 
 def _strip_trailing_punctuation(value: str) -> str:
-    return value.rstrip(" ,.;:)")
+    """
+    Удаляет trailing пунктуацию, НО сохраняет закрывающую скобку если она сбалансирована.
+    Например: "слово)" -> "слово", но "слово (пояснение)" -> "слово (пояснение)"
+    """
+    stripped = value.rstrip(" ,.;:")
+    # Проверяем, нужно ли удалять закрывающую скобку
+    if stripped.endswith(')'):
+        # Считаем скобки - если сбалансированы, оставляем
+        open_count = stripped.count('(')
+        close_count = stripped.count(')')
+        if open_count == close_count:
+            # Сбалансированы - не трогаем
+            return stripped
+        else:
+            # Несбалансированы - удаляем trailing )
+            return stripped.rstrip(')')
+    return stripped
 
 
 def _looks_like_participle(text: str) -> bool:
@@ -2341,7 +2468,17 @@ def _is_meaningful_item(value: str) -> bool:
     if not value:
         return False
     stripped = value.strip()
-    return stripped not in {",", ";", ".", ")", "("}
+    if stripped in {",", ";", ".", ")", "("}:
+        return False
+    # Фильтруем items с тильдой - это примеры Esperanto, не переводы
+    # Например: "`улей ~ujo" или "`улей natura ~ujo"
+    if '~' in value:
+        return False
+    # Фильтруем сломанные отсылки типа "см.tifoido" (без пробела после см.)
+    # Правильные отсылки уже отфильтрованы в _is_pure_reference_segment
+    if stripped.startswith(('см.', 'ср.')):
+        return False
+    return True
 
 
 _OPTIONAL_PREFIX_SPACE_RE = re.compile(r"\(([^)]+)\)\s+([^\s,;:.()]+)")
