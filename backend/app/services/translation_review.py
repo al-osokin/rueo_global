@@ -295,6 +295,8 @@ def _collect_groups_from_blocks(
             if label and label.strip().lower().startswith("т.е"):
                 items = _split_leading_adjectives(items)
             items = _normalize_compound_terms(items)
+            # Раскрываем списки прилагательных: "adj1, adj2 noun" -> "adj1 noun | adj2 noun"
+            items = _expand_adjective_list(items)
             label_text = label.strip().rstrip(".").lower() if label else ""
             if label_text in _IGNORABLE_LABELS:
                 label = None
@@ -676,6 +678,8 @@ def _build_groups_from_example(
         if label_text and label_text.startswith('т.е'):
             expanded_items = _split_leading_adjectives(expanded_items)
         expanded_items = _normalize_compound_terms(expanded_items)
+        # Раскрываем списки прилагательных
+        expanded_items = _expand_adjective_list(expanded_items)
         candidates = _build_translation_candidates(base_items, expanded_items)
         group = TranslationGroup(
             items=list(expanded_items),
@@ -1627,6 +1631,58 @@ def _split_leading_adjectives(items: List[str]) -> List[str]:
 
     collapsed = [_collapse_repeated_segment(item) for item in result]
     return _deduplicate(collapsed)
+
+
+def _expand_adjective_list(items: List[str]) -> List[str]:
+    """
+    Раскрывает списки прилагательных перед существительным.
+    
+    Работает с УЖЕ РАЗБИТЫМ списком items:
+    - Input: ['брюшной', 'задний плавник']
+    - Output: ['брюшной плавник', 'задний плавник']
+    
+    Паттерн: [adj1, adj2, ..., adj_n noun] -> [adj1 noun, adj2 noun, ..., adj_n noun]
+    """
+    if len(items) < 2:
+        return items
+    
+    # Проверяем последний элемент - должен содержать существительное
+    last_item = items[-1].strip()
+    last_tokens = last_item.split()
+    
+    # Последний элемент должен быть либо "adj noun", либо просто "noun"
+    if not last_tokens:
+        return items
+    
+    # Определяем существительное (последнее слово в последнем элементе)
+    noun = last_tokens[-1]
+    
+    # Проверяем что все предыдущие элементы - одиночные прилагательные
+    adjectives = []
+    for item in items[:-1]:
+        stripped = item.strip()
+        tokens = stripped.split()
+        # Должно быть одно слово И быть прилагательным
+        if len(tokens) == 1 and _looks_like_adjective(tokens[0]):
+            adjectives.append(tokens[0])
+        else:
+            # Не подходит под паттерн
+            return items
+    
+    # Если нашли хотя бы одно прилагательное перед последним элементом
+    if not adjectives:
+        return items
+    
+    # Если последний элемент - "adj noun", включаем его в результат
+    result: List[str] = []
+    if len(last_tokens) >= 2 and _looks_like_adjective(last_tokens[0]):
+        result.append(last_item)
+    
+    # Создаём комбинации: adj1 noun, adj2 noun, ...
+    for adj in adjectives:
+        result.append(_clean_spacing(f"{adj} {noun}"))
+    
+    return _deduplicate(result)
 
 
 def _normalize_compound_terms(items: List[str]) -> List[str]:
