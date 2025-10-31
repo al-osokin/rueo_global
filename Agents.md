@@ -686,10 +686,150 @@ All test articles passed:
 8. Склеивание с примерами (#5) - edge cases
 
 ### Следующие шаги
-1. Исправить фронтенд (претензия от редактора)
+1. ✅ Исправить фронтенд (претензия от редактора) - DONE (31.10.25)
 2. Системно исправить критичные проблемы парсера
 3. Full reparse после исправлений
 4. Повторная проверка первых 60 статей
+
+## PLAN: Fixing parser issues systematically (31.10.25)
+
+### Strategy
+**Primary goal:** Fix issues in parser_v3 templates/normalization, NOT in translation_review post-processing.
+- Parser_v3 should produce correct semantic structure from the start
+- Translation_review should only handle grouping/candidate generation, not fixing parser mistakes
+- Eliminate remaining dependencies on legacy parser_v2.0_clean.py
+
+### Current architecture issues
+1. **parser_v3/templates.py** - Some templates still call `legacy_parser.parse_article()` (lines 193, 219, 255, 269)
+2. **parser_v3/normalization.py** - Uses `legacy_parser` for label registration and KNOWN_SHORTENINGS
+3. **translation_review.py** - Has many workarounds fixing parser output (should be minimal after fixing parser)
+
+### Issue resolution plan (grouped by fix location)
+
+#### GROUP A: Fix in parser_v3 text parsing (text_parser.py)
+These are fundamental text parsing issues that should be caught during initial parse:
+
+**#2: Complex notes with equals sign and references** (статья 10)
+- Problem: `счёты (_прибор_ = <globkalkulilo>, <bidkalkulilo>);` не обрабатывается
+- Location: `text_parser.py` - enhance note parsing to handle `=` and references
+- Test: статья 10 should properly separate note from translation
+
+**#11: Italic text in translations** (статья 56)
+- Problem: `_или органа_` и `_ср._` включаются в перевод
+- Location: `text_parser.py` - mark italic segments as explanations/references
+- Test: статья 56 should have clean translations without italic markers
+
+**#13: Official marks with numbers** (статья 58)
+- Problem: `*2` парсится с потерей звёздочки, цифра попадает в текст
+- Location: `text_parser.py` - recognize `*[0-9]+` pattern as official_mark
+- Test: статья 58 should have official_mark='*2' in metadata
+
+#### GROUP B: Fix in parser_v3 normalization (normalization.py)
+These are issues with segment classification and expansion:
+
+**#1: Grave accent word merging** (статья 2) **[CRITICAL]**
+- Problem: `(\`имя) прилаг\`ательное` → `\`имяприлаг\`ательное` (без пробела)
+- Location: `normalization.py` `_expand_parenthetical_forms` or earlier
+- Check: Does parser_v3 preserve spaces correctly before optional parts?
+- Test: статья 2 should give `прилагательное | \`имя прилагательное` (с пробелом)
+
+**#3: Leading adjective expansion** (статьи 19, 42) **[CRITICAL]**
+- Problem: `"брюшной, задний плавник"` не раскрывается
+- Location: `normalization.py` - `_split_leading_adjectives` not triggered
+- Check: Is this called from parser_v3 or only from translation_review?
+- Test: статья 19 should give `брюшной плавник | задний плавник`
+
+**#12: Note alternatives with _или_** (статья 57) **[CRITICAL]**
+- Problem: `отложительный (_или_ отделительный, _или_ исходный)` не раскрывается
+- Location: `normalization.py` - enhance `_extract_note_alternatives`
+- Test: статья 57 should give 3 adjective+noun combinations + аблатив
+
+#### GROUP C: Fix in parser_v3 templates (templates.py)
+These are structural parsing issues related to article structure:
+
+**#4: Tilde examples in translations** (статьи 19, 23)
+- Problem: Строки с `~` (примеры) склеиваются с переводами
+- Location: `templates.py` - classify tilde lines as examples, not translations
+- Test: статья 23 `[~uj/o]` should separate translation from `(natura) ~ujo` example
+
+**#6: Optional parts after words** (статья 39)
+- Problem: `отклонение (от нормы)` → захват `"(от"` с открывающей скобкой
+- Location: `templates.py` or `text_parser.py` - fix parenthesis splitting logic
+- Test: статья 39 should give `отклонение | отклонение от нормы`
+
+**#10: Articles with only references** (статья 55)
+- Problem: Создаётся группа с содержимым `"1"` (номер значения)
+- Location: `templates.py` - detect reference-only articles, skip empty groups
+- Test: статья 55 should create zero translation groups
+
+#### GROUP D: Fix in translation_review.py (keep minimal)
+These SHOULD be in parser, but may require translation_review fixes:
+
+**#5: Multiline translation splitting** (статья 54) **[CRITICAL]**
+- Problem: Continuation lines разбиваются неправильно, теряется контекст
+- Location: Check parser_v3 first - does it merge continuation lines?
+- Fallback: `translation_review.py` `_apply_source_fallback` continuation logic
+- Test: статья 54 `[~iĝ/i]` should have 3 complete translations, not fragments
+
+**#8: Reference filtering** (статьи 52, 56)
+- Problem: `_ср._ <...>` создаёт группы с `"<"`
+- Location: Already has `_is_pure_reference_segment` - extend patterns?
+- Test: статья 52/56 should skip reference lines
+
+**#9: Continuation line merging** (статья 54)
+- Same as #5 - check if parser_v3 handles this
+
+#### GROUP E: UI/Candidate generation (translation_review.py)
+Not parser issues, but review logic:
+
+**#7: "Как в источнике" candidate broken** (глобально)
+- Problem: Shows same as main variant instead of simple split by `,` and `;`
+- Location: `translation_review.py` - base_items generation logic
+- Test: Any article - "Как в источнике" should show unstemmed source
+
+### Implementation order (31.10.25)
+
+**PHASE 1: Critical text parsing (GROUP A)**
+1. Issue #13 (official marks) - simple pattern recognition
+2. Issue #11 (italic filtering) - enhance stylistic marker detection
+3. Issue #2 (complex notes) - extend note parsing
+
+**PHASE 2: Critical normalization (GROUP B)**
+1. Issue #1 (grave merging) - **HIGHEST PRIORITY** - affects many articles
+2. Issue #3 (leading adjectives) - common pattern
+3. Issue #12 (note alternatives) - multiline handling
+
+**PHASE 3: Structural fixes (GROUP C)**
+1. Issue #4 (tilde examples) - classification logic
+2. Issue #10 (reference-only) - empty group prevention
+3. Issue #6 (optional parts) - parenthesis handling
+
+**PHASE 4: Translation review fixes (GROUP D)**
+1. Issue #5/#9 (multiline merging) - continuation lines
+2. Issue #8 (reference filtering) - extend patterns
+3. Issue #7 (candidate base_items) - UI improvement
+
+**PHASE 5: Testing & full reparse**
+1. Test all 13 problematic articles (2, 10, 19, 23, 39, 42, 52, 54, 55, 56, 57, 58)
+2. Test reference articles (270, 365, 383)
+3. Full reparse of all 46k+ articles
+4. Review first 100 articles for new issues
+
+### Test articles reference
+- **Статья 2** (a-vort/o): grave merging
+- **Статья 10** (abak/o): complex notes
+- **Статья 19** (abd/omen/o): leading adjectives
+- **Статья 23** (abel/o): tilde examples
+- **Статья 39** (aber/aci/o): optional parts
+- **Статья 42** (abevil/a): multiple leading adjectives
+- **Статья 52, 56**: reference filtering
+- **Статья 54** (abituri/ent/o): multiline continuation
+- **Статья 55** (abisin/o): reference-only
+- **Статья 57** (ablativ/o): note alternatives
+- **Статья 58** (abnegaci/o): official marks
+- **Статья 270** (aer/o): regression testing (25 groups)
+- **Статья 365** (aer/trafik/o): regression testing (4 groups)
+- **Статья 383** (afekt/i): regression testing (53 groups)
 
 ## Quick reference: test article 270
 
