@@ -228,6 +228,107 @@ def _merge_illustration_continuations(block: Dict[str, Any]) -> None:
         block.pop("children", None)
 
 
+def _merge_translation_continuations(block: Dict[str, Any]) -> None:
+    """
+    Merge consecutive translation children in headword blocks.
+    
+    When a translation spans multiple indented lines (continuation),
+    parser creates separate translation blocks. This function merges them
+    into a single block.
+    
+    Key logic: Merge continues until a translation block ends with sentence
+    divider (';'). This indicates end of phrase, not a continuation.
+    
+    Example:
+        Line 1: "окончить..., пройти выпускной"  ← no ';' at end
+        Line 2: "  экзамен, пройти экзамен"  ← no ';' at end
+        Line 3: "  на аттестат зрелости;"  ← ends with ';' - stop merging
+    
+    These create 3 separate translation children, merged into one here.
+    """
+    if block.get("type") != "headword":
+        return
+    
+    children = block.get("children", []) or []
+    if len(children) < 2:
+        return
+    
+    merged_children: List[Dict[str, Any]] = []
+    current_translation: Optional[Dict[str, Any]] = None
+    
+    for child in children:
+        child_type = child.get("type")
+        
+        # If this is a translation block
+        if child_type == "translation":
+            content = child.get("content", [])
+            has_ru_segments = bool(child.get("ru_segments"))
+            
+            # Translation blocks without ru_segments are raw parsed blocks
+            # that can be continuation lines - check if should merge
+            if content and not has_ru_segments:
+                
+                # Check if PREVIOUS accumulated translation ended with ';'
+                # If so, flush it before starting new accumulation
+                if current_translation is not None:
+                    prev_content = current_translation.get("content", [])
+                    ends_with_sentence = False
+                    if prev_content:
+                        last_item = prev_content[-1]
+                        if isinstance(last_item, dict):
+                            if (last_item.get("type") == "divider" and 
+                                last_item.get("text") == ";"):
+                                ends_with_sentence = True
+                    
+                    if ends_with_sentence:
+                        # Previous translation complete - flush before merging this one
+                        if not current_translation.get("children"):
+                            current_translation.pop("children", None)
+                        merged_children.append(current_translation)
+                        current_translation = None
+                
+                if current_translation is None:
+                    # First translation OR starting fresh after flush - start accumulating
+                    current_translation = dict(child)
+                    # Initialize merged content and children
+                    current_translation["content"] = list(content)
+                    current_translation["children"] = list(child.get("children", []) or [])
+                else:
+                    # Continuation - merge content and children
+                    current_content = current_translation.setdefault("content", [])
+                    current_children = current_translation.setdefault("children", [])
+                    
+                    # Add continuation content
+                    for item in content:
+                        current_content.append(item)
+                    
+                    # Add continuation children (e.g., explanation/note blocks)
+                    for child_item in (child.get("children", []) or []):
+                        current_children.append(child_item)
+                
+                continue
+        
+        # Different block type OR translation with ru_segments - flush current
+        if current_translation is not None:
+            # Clean up empty children array
+            if not current_translation.get("children"):
+                current_translation.pop("children", None)
+            merged_children.append(current_translation)
+            current_translation = None
+        
+        merged_children.append(child)
+    
+    # Flush last accumulated translation
+    if current_translation is not None:
+        # Clean up empty children array
+        if not current_translation.get("children"):
+            current_translation.pop("children", None)
+        merged_children.append(current_translation)
+    
+    if merged_children:
+        block["children"] = merged_children
+
+
 def normalize_article(
     article: Dict[str, Any],
     *,
@@ -426,6 +527,10 @@ def _normalize_explanation(block: Dict[str, Any]) -> Dict[str, Any]:
 
 def _normalize_headword(block: Dict[str, Any]) -> Dict[str, Any]:
     new_block = dict(block)
+    
+    # Merge translation continuations BEFORE other processing
+    _merge_translation_continuations(new_block)
+    
     children = new_block.get("children") or []
     if children:
         last_child = children[-1]
