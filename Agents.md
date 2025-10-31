@@ -940,6 +940,15 @@ def _should_collapse(candidate: str) -> bool:
 **Location:** `translation_review.py` lines 2491-2493 (_should_collapse in _compress_optional_prefix_spacing)
 **Credit:** Fixed by second Droid instance in focused debugging session
 
+### Issue #3: Leading adjectives expansion - FIXED ✓
+**Problem:** `"брюшной, задний плавник"` not expanded to `"брюшной плавник | задний плавник"`
+**Solution:** Added `_expand_adjective_list()` that detects pattern [adj1, adj2, ..., noun] and creates all combinations.
+**Test:**
+- Article 19: `['з\`адний плавн\`ик', 'брюшн\`ой плавн\`ик']` ✓
+- Article 42: 3 combinations ✓
+- Article 270: 25 groups ✓
+**Location:** `translation_review.py` lines 1636-1685, 298-299, 681-682
+
 ### Issue #6: Optional parts after words - PARTIALLY FIXED ⚠️
 **Problem:** `отклонение (от нормы)` lost closing parenthesis, becoming `отклонение (от нормы` (article 39)
 **Solution implemented:**
