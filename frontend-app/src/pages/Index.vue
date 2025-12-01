@@ -463,11 +463,15 @@ export default {
 </script>
 <style lang="sass">
 .dictionary-article
-  background-color: $grey-3
+  background-color: var(--rueo-card-bg)
+  border: 1px solid var(--rueo-card-border)
   display: grid
   grid-template-columns: 1fr
+  color: var(--rueo-text-secondary)
 .dictionary-article:first-child
-  background-color: white
+  background-color: var(--rueo-card-featured-bg)
+.body--dark .dictionary-article:first-child
+  background-color: var(--rueo-card-bg)
 .dictionary-article__remove-button
     width: 2em
     justify-self: end
