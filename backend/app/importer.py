@@ -532,55 +532,6 @@ def _rewrite_source_file_if_needed(file_path: Path, entries: Sequence[Dict[str, 
         file_path.write_text(new_text, encoding="cp1251")
 
 
-def _rewrite_source_file_if_needed(file_path: Path, entries: Sequence[Dict[str, Any]]) -> None:
-    if not any(entry.get("header_changed") for entry in entries):
-        return
-
-    try:
-        original_text = file_path.read_text(encoding="cp1251")
-    except (UnicodeDecodeError, FileNotFoundError):
-        return
-
-    pieces: List[str] = []
-    last_pos = 0
-    text_length = len(original_text)
-
-    for entry in entries:
-        span = entry.get("span")
-        if not span:
-            continue
-        start, end = span
-        start = min(start, text_length)
-        end = min(end, text_length)
-        pieces.append(original_text[last_pos:start])
-
-        header_lines = entry.get("header_lines") or []
-        original_header_text = entry.get("original_header_text") or ""
-        body_raw = entry.get("body_raw") or ""
-        full_block = entry.get("full_block") or (original_header_text + body_raw)
-
-        line_break = "\r\n" if "\r\n" in original_header_text else "\n"
-        if header_lines:
-            header_text = line_break.join(header_lines) + line_break
-        else:
-            header_text = ""
-
-        consumed = len(original_header_text) + len(body_raw)
-        suffix = ""
-        if full_block and consumed <= len(full_block):
-            suffix = full_block[consumed:]
-        if not suffix:
-            suffix = line_break * 2
-
-        pieces.append(header_text + body_raw + suffix)
-        last_pos = end
-
-    pieces.append(original_text[last_pos:])
-    new_text = "".join(pieces)
-    if new_text != original_text:
-        file_path.write_text(new_text, encoding="cp1251")
-
-
 def _create_index_table(
     session: Session,
     lang: str,
