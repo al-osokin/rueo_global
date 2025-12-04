@@ -316,6 +316,56 @@ def _parse_articles(file_path: Path) -> List[Dict[str, Optional[str]]]:
     return entries
 
 
+def _rewrite_source_file_if_needed(file_path: Path, entries: Sequence[Dict[str, Any]]) -> None:
+    if not any(entry.get("header_changed") for entry in entries):
+        return
+
+    try:
+        original_text = file_path.read_text(encoding="cp1251")
+    except (UnicodeDecodeError, FileNotFoundError):
+        return
+
+    pieces: List[str] = []
+    last_pos = 0
+    text_length = len(original_text)
+
+    for entry in entries:
+        span = entry.get("span")
+        if not span:
+            continue
+        start, end = span
+        start = min(start, text_length)
+        end = min(end, text_length)
+        pieces.append(original_text[last_pos:start])
+
+        original_header_text = entry.get("original_header_text") or ""
+        header_lines = entry.get("header_lines") or []
+        body_raw = entry.get("body_raw") or ""
+        tail_text = entry.get("tail_text")
+        if tail_text is None:
+            full_block = entry.get("full_block") or (original_header_text + body_raw)
+            consumed = len(original_header_text) + len(body_raw)
+            tail_text = ""
+            if full_block and consumed <= len(full_block):
+                tail_text = full_block[consumed:]
+        tail_text = tail_text or ""
+
+        line_break = "\r\n" if "\r\n" in original_header_text else "\n"
+        header_text = ""
+        if header_lines:
+            header_text = line_break.join(header_lines)
+            if not header_text.endswith(line_break):
+                header_text += line_break
+
+        pieces.append(f"{header_text}{body_raw}{tail_text}")
+        last_pos = end
+
+    pieces.append(original_text[last_pos:])
+    new_text = "".join(pieces)
+    if new_text != original_text:
+        file_path.write_text(new_text, encoding="cp1251")
+
+
 def _create_index_table(
     session: Session,
     lang: str,
