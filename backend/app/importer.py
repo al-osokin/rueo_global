@@ -6,8 +6,7 @@ import logging
 import os
 import re
 from collections import OrderedDict
-from datetime import datetime, date
-from zoneinfo import ZoneInfo
+from datetime import date, datetime
 from pathlib import Path
 from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence, Tuple
 
@@ -196,14 +195,7 @@ def run_import(
     notify = _make_notifier(status_callback)
     notify("initializing", message="Старт импорта данных")
 
-    run_time = datetime.now(ZoneInfo("Europe/Moscow")).replace(tzinfo=None)
-    force_header_date: Optional[date] = None
-    header_env = os.getenv("RUEO_IMPORT_HEADER_DATE")
-    if header_env:
-        try:
-            force_header_date = datetime.strptime(header_env, "%Y-%m-%d").date()
-        except ValueError:
-            LOGGER.warning("Invalid RUEO_IMPORT_HEADER_DATE value: %s", header_env)
+    run_time = datetime.now()
     previous_update_date = _load_previous_update_date(data_dir)
     eo_summary: Dict[str, int] = {}
     ru_summary: Dict[str, int] = {}
@@ -221,8 +213,6 @@ def run_import(
             "eo",
             run_time,
             previous_update_date=previous_update_date,
-            override_fake_date=force_header_date,
-            auto_header_date=force_header_date,
             progress_callback=lambda update: notify(
                 "processing_files", lang="eo", **update
             ),
@@ -243,8 +233,6 @@ def run_import(
             "ru",
             run_time,
             previous_update_date=previous_update_date,
-            override_fake_date=force_header_date,
-            auto_header_date=force_header_date,
             progress_callback=lambda update: notify(
                 "processing_files", lang="ru", **update
             ),
@@ -322,10 +310,8 @@ def _process_language(
     lang: str,
     run_time: datetime,
     previous_update_date: Optional[date] = None,
-    override_fake_date: Optional[date] = None,
-    auto_header_date: Optional[date] = None,
     progress_callback: Optional[ProgressCallback] = None,
-) -> Tuple[int, Dict[str, int]]:
+) -> Tuple[int, Dict[str, int], Dict[str, List[Dict[str, Any]]]]:
     lang_dir_name = LANG_DIRS[lang]
     lang_dir = data_dir / lang_dir_name
     if not lang_dir.exists():
@@ -349,8 +335,6 @@ def _process_language(
         lang,
         run_time,
         previous_update_date=previous_update_date,
-        override_fake_date=override_fake_date,
-        auto_header_date=auto_header_date,
     )
     structure_alerts: Dict[str, List[Dict[str, Any]]] = {}
 
@@ -410,7 +394,7 @@ def _process_language(
             )
 
         tracker.finalize_file(file_state)
-        if lang != "eo":
+        if lang == "ru":
             _rewrite_source_file_if_needed(file_path, entries)
         session.execute(insert(article_table), insert_payload)
         total_inserted += len(insert_payload)
@@ -836,36 +820,6 @@ def _save_last_ru_letter(data_dir: Path, last_word: str) -> None:
     target.write_text(last_word, encoding="utf-8")
 
 
-def _russian_num_form(number: int, form1: str, form2_4: str, form_many: str) -> str:
-    """
-    Selects the correct noun form after a cardinal number:
-    1 слово, 2 слова, 5 слов.
-    """
-    n = abs(number) % 100
-    if 11 <= n <= 19:
-        return form_many
-    last = n % 10
-    if last == 1:
-        return form1
-    if last in (2, 3, 4):
-        return form2_4
-    return form_many
-
-
-def _russian_in_form(number: int, form1: str, form_other: str, form_exact_thousand: Optional[str] = None) -> str:
-    """
-    Selects the correct noun form in prepositional case when used with 'в':
-    в 1 словарной статье, в 2 словарных статьях, в 5 словарных статьях.
-    When a number ends with 000, optionally returns an alternate form (e.g. статей).
-    """
-    if form_exact_thousand and number and number % 1000 == 0:
-        return form_exact_thousand
-    n = abs(number) % 100
-    if n % 10 == 1 and n // 10 != 1:
-        return form1
-    return form_other
-
-
 def _write_status_file(
     data_dir: Path,
     stats: Dict[str, Dict[str, Any]],
@@ -883,33 +837,12 @@ def _write_status_file(
     ru_ready_articles = stats["ru"].get("ready_articles", stats["ru"].get("articles", 0))
     ru_ready_words = stats["ru"].get("ready_words", stats["ru"].get("words", 0))
     last_word = stats["ru"].get("ready_last_word")
-    range_text = f"диапазон А — {last_word}" if last_word else None
-
-    eo_words_form = _russian_num_form(eo_words, "слово", "слова", "слов")
-    eo_articles_form = _russian_in_form(
-        eo_articles,
-        "словарной статье",
-        "словарных статьях",
-        "словарных статей",
-    )
-    ru_words_form = _russian_num_form(ru_ready_words, "слово", "слова", "слов")
-    ru_articles_form = _russian_in_form(
-        ru_ready_articles,
-        "словарной статье",
-        "словарных статьях",
-        "словарных статей",
-    )
-
-    if range_text:
-        ru_prefix = f"рабочие материалы большого русско-эсперантского словаря ({range_text})"
-    else:
-        ru_prefix = "большой русско-эсперантский словарь в актуальной редакции"
+    range_text = f"диапазон А — {last_word}" if last_word else "диапазон А — …"
 
     content = (
         "Открыты для поиска:\n"
-        f"большой эсперанто-русский словарь в актуальной редакции, {eo_words} {eo_words_form} "
-        f"в {eo_articles} {eo_articles_form};\n"
-        f"{ru_prefix}, {ru_ready_words} {ru_words_form} в {ru_ready_articles} {ru_articles_form}."
+        f"большой эсперанто-русский словарь в актуальной редакции, {eo_words} cлова в {eo_articles} словарных статьях;\n"
+        f"рабочие материалы большого русско-эсперантского словаря ({range_text}), {ru_ready_words} cлов в {ru_ready_articles} словарных статьях."
     )
     klarigo_path = tekstoj_dir / "klarigo.md"
     try:
@@ -919,14 +852,8 @@ def _write_status_file(
 
     tracking_summary = {
         "run_at": stats.get("meta", {}).get("run_at") or run_time.isoformat(),
-        "eo": {
-            "tracking": stats.get("eo", {}).get("tracking", {}),
-            "structure_issues": stats.get("eo", {}).get("structure_issues", {}),
-        },
-        "ru": {
-            "tracking": stats.get("ru", {}).get("tracking", {}),
-            "structure_issues": stats.get("ru", {}).get("structure_issues", {}),
-        },
+        "eo": stats.get("eo", {}).get("tracking", {}),
+        "ru": stats.get("ru", {}).get("tracking", {}),
     }
     tracking_path = tekstoj_dir / "tracking-summary.json"
     try:

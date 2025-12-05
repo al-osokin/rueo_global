@@ -4,7 +4,7 @@ import hashlib
 import re
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
-from typing import Dict, Iterable, List, Optional, Tuple
+from typing import Dict, Iterable, List, Optional
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -13,6 +13,9 @@ from app.models import ArticleChangeLog, ArticleFileState, ArticleState
 
 
 HEADER_REGEX = re.compile(r"^(?P<date>\d{4}-\d{2}-\d{2}) (?P<time>\d{2}:\d{2}) (?P<initials>[a-zA-Z0-9_]+)(?P<suffix>#?)$")
+BROKEN_HEADER_PREFIX_REGEX = re.compile(
+    r"^(?P<prefix>\d+)(?P<body>\d{4}-\d{2}-\d{2} \d{2}:\d{2} [a-zA-Z0-9_]+#?)$"
+)
 CANONICAL_REGEX = re.compile(r"\[(.+?)\]")
 
 FIXED_INITIALS = "bk"
@@ -52,6 +55,20 @@ def calculate_checksum_from_text(text: str) -> str:
             ) from None
         hasher.update(payload)
     return hasher.hexdigest()
+
+
+def sanitize_header_line(line: str) -> str:
+    if not line:
+        return ""
+    stripped = line.strip()
+    if HEADER_REGEX.match(stripped):
+        return stripped
+    broken = BROKEN_HEADER_PREFIX_REGEX.match(stripped)
+    if broken:
+        candidate = broken.group("body")
+        if HEADER_REGEX.match(candidate):
+            return candidate
+    return stripped
 
 
 @dataclass
@@ -114,6 +131,14 @@ class ArticleTracker:
             "articles_auto_dated": 0,
             "articles_new": 0,
         }
+
+    def _sanitize_header_lines(self, header_lines: List[str]) -> None:
+        for index, line in enumerate(header_lines or []):
+            if not line:
+                continue
+            cleaned = sanitize_header_line(line)
+            if cleaned != line:
+                header_lines[index] = cleaned
 
     def ensure_file_state(self, file_path: str, file_modified: Optional[datetime]) -> ArticleFileState:
         if file_path in self.file_cache:
@@ -212,36 +237,25 @@ class ArticleTracker:
                     state.canonical_key = canonical_key
                     state.canonical_occurrence = occurrence
 
+        self._sanitize_header_lines(header_lines)
         last_header_line = header_lines[-1] if header_lines else None
         stored_header_line: Optional[str] = None
         stored_header_info: Optional[HeaderInfo] = None
         if state is not None:
+            sanitized_stored = sanitize_header_line(state.last_header_line or "")
+            state.last_header_line = sanitized_stored or None
             stored_header_line = state.last_header_line
             if stored_header_line:
                 stored_header_info = parse_header_line(stored_header_line)
-                current_info = parse_header_line(last_header_line) if last_header_line else None
-                if (
-                    current_info
-                    and current_info.initials == FIXED_INITIALS
-                    and current_info.timestamp.strftime("%H:%M") == FIXED_TIME
-                    and stored_header_info
-                ):
-                    if header_lines:
-                        header_lines[-1] = stored_header_line
-                    else:
-                        header_lines.append(stored_header_line)
-                    last_header_line = stored_header_line
-                    current_info = stored_header_info
-                if stored_header_info and (
-                    not current_info or stored_header_info.timestamp > current_info.timestamp
-                ):
-                    if header_lines:
-                        header_lines[-1] = stored_header_line
-                    else:
-                        header_lines.append(stored_header_line)
-                    last_header_line = stored_header_line
 
         header_info = parse_header_line(last_header_line) if last_header_line else None
+        if header_info is None and stored_header_line and stored_header_info:
+            if header_lines:
+                header_lines[-1] = stored_header_line
+            else:
+                header_lines.append(stored_header_line)
+            last_header_line = stored_header_line
+            header_info = stored_header_info
 
         if state is None:
             state = ArticleState(
@@ -261,11 +275,13 @@ class ArticleTracker:
         content_changed = state.checksum != checksum
 
         if not content_changed:
-            if stored_header_line:
-                if header_lines:
-                    header_lines[-1] = stored_header_line
-                else:
-                    header_lines.append(stored_header_line)
+            new_header_line = None
+            if header_lines:
+                new_header_line = header_lines[-1]
+            elif stored_header_line:
+                new_header_line = stored_header_line
+            sanitized_line = sanitize_header_line(new_header_line) if new_header_line else None
+            state.last_header_line = sanitized_line or state.last_header_line
             state.checksum = checksum
             state.article_index = article_index
             state.last_seen_at = self.run_time
