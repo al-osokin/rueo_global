@@ -243,32 +243,10 @@ class ArticleTracker:
         stored_header_info: Optional[HeaderInfo] = None
         if state is not None:
             sanitized_stored = sanitize_header_line(state.last_header_line or "")
-            if sanitized_stored and sanitized_stored != state.last_header_line:
-                state.last_header_line = sanitized_stored
+            state.last_header_line = sanitized_stored or None
             stored_header_line = state.last_header_line
             if stored_header_line:
                 stored_header_info = parse_header_line(stored_header_line)
-                current_info = parse_header_line(last_header_line) if last_header_line else None
-                if (
-                    current_info
-                    and current_info.initials == FIXED_INITIALS
-                    and current_info.timestamp.strftime("%H:%M") == FIXED_TIME
-                    and stored_header_info
-                ):
-                    if header_lines:
-                        header_lines[-1] = stored_header_line
-                    else:
-                        header_lines.append(stored_header_line)
-                    last_header_line = stored_header_line
-                    current_info = stored_header_info
-                if stored_header_info and (
-                    not current_info or stored_header_info.timestamp > current_info.timestamp
-                ):
-                    if header_lines:
-                        header_lines[-1] = stored_header_line
-                    else:
-                        header_lines.append(stored_header_line)
-                    last_header_line = stored_header_line
 
         header_info = parse_header_line(last_header_line) if last_header_line else None
         if header_info is None and stored_header_line and stored_header_info:
@@ -297,11 +275,13 @@ class ArticleTracker:
         content_changed = state.checksum != checksum
 
         if not content_changed:
-            if stored_header_line:
-                if header_lines:
-                    header_lines[-1] = stored_header_line
-                else:
-                    header_lines.append(stored_header_line)
+            new_header_line = None
+            if header_lines:
+                new_header_line = header_lines[-1]
+            elif stored_header_line:
+                new_header_line = stored_header_line
+            sanitized_line = sanitize_header_line(new_header_line) if new_header_line else None
+            state.last_header_line = sanitized_line or state.last_header_line
             state.checksum = checksum
             state.article_index = article_index
             state.last_seen_at = self.run_time

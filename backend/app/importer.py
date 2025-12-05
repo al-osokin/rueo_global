@@ -6,7 +6,7 @@ import logging
 import os
 import re
 from collections import OrderedDict
-from datetime import datetime, date
+from datetime import date, datetime
 from zoneinfo import ZoneInfo
 from pathlib import Path
 from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence, Tuple
@@ -196,6 +196,7 @@ def run_import(
     notify = _make_notifier(status_callback)
     notify("initializing", message="Старт импорта данных")
 
+<<<<<<< HEAD
     run_time = datetime.now(ZoneInfo("Europe/Moscow")).replace(tzinfo=None)
     force_header_date: Optional[date] = None
     header_env = os.getenv("RUEO_IMPORT_HEADER_DATE")
@@ -204,6 +205,9 @@ def run_import(
             force_header_date = datetime.strptime(header_env, "%Y-%m-%d").date()
         except ValueError:
             LOGGER.warning("Invalid RUEO_IMPORT_HEADER_DATE value: %s", header_env)
+=======
+    run_time = datetime.now()
+>>>>>>> fff1872 (Restore structure checks and preserve manual headers)
     previous_update_date = _load_previous_update_date(data_dir)
     eo_summary: Dict[str, int] = {}
     ru_summary: Dict[str, int] = {}
@@ -221,8 +225,11 @@ def run_import(
             "eo",
             run_time,
             previous_update_date=previous_update_date,
+<<<<<<< HEAD
             override_fake_date=force_header_date,
             auto_header_date=force_header_date,
+=======
+>>>>>>> fff1872 (Restore structure checks and preserve manual headers)
             progress_callback=lambda update: notify(
                 "processing_files", lang="eo", **update
             ),
@@ -243,8 +250,11 @@ def run_import(
             "ru",
             run_time,
             previous_update_date=previous_update_date,
+<<<<<<< HEAD
             override_fake_date=force_header_date,
             auto_header_date=force_header_date,
+=======
+>>>>>>> fff1872 (Restore structure checks and preserve manual headers)
             progress_callback=lambda update: notify(
                 "processing_files", lang="ru", **update
             ),
@@ -322,10 +332,13 @@ def _process_language(
     lang: str,
     run_time: datetime,
     previous_update_date: Optional[date] = None,
+<<<<<<< HEAD
     override_fake_date: Optional[date] = None,
     auto_header_date: Optional[date] = None,
+=======
+>>>>>>> fff1872 (Restore structure checks and preserve manual headers)
     progress_callback: Optional[ProgressCallback] = None,
-) -> Tuple[int, Dict[str, int]]:
+) -> Tuple[int, Dict[str, int], Dict[str, List[Dict[str, Any]]]]:
     lang_dir_name = LANG_DIRS[lang]
     lang_dir = data_dir / lang_dir_name
     if not lang_dir.exists():
@@ -349,8 +362,11 @@ def _process_language(
         lang,
         run_time,
         previous_update_date=previous_update_date,
+<<<<<<< HEAD
         override_fake_date=override_fake_date,
         auto_header_date=auto_header_date,
+=======
+>>>>>>> fff1872 (Restore structure checks and preserve manual headers)
     )
     structure_alerts: Dict[str, List[Dict[str, Any]]] = {}
 
@@ -410,7 +426,8 @@ def _process_language(
             )
 
         tracker.finalize_file(file_state)
-        _rewrite_source_file_if_needed(file_path, entries)
+        if lang == "ru":
+            _rewrite_source_file_if_needed(file_path, entries)
         session.execute(insert(article_table), insert_payload)
         total_inserted += len(insert_payload)
         if progress_callback:
@@ -480,6 +497,7 @@ def _parse_articles(file_path: Path) -> Tuple[List[Dict[str, Optional[str]]], Li
             }
         )
     return entries, structure_issues
+<<<<<<< HEAD
 
 
 def _rewrite_source_file_if_needed(file_path: Path, entries: Sequence[Dict[str, Any]]) -> None:
@@ -530,6 +548,8 @@ def _rewrite_source_file_if_needed(file_path: Path, entries: Sequence[Dict[str, 
     new_text = "".join(pieces)
     if new_text != original_text:
         file_path.write_text(new_text, encoding="cp1251")
+=======
+>>>>>>> fff1872 (Restore structure checks and preserve manual headers)
 
 
 def _rewrite_source_file_if_needed(file_path: Path, entries: Sequence[Dict[str, Any]]) -> None:
