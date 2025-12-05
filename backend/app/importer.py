@@ -831,6 +831,19 @@ def _write_status_file(
     tekstoj_dir = base_dir / "tekstoj"
     tekstoj_dir.mkdir(parents=True, exist_ok=True)
 
+    def _rus_plural(value: int, singular: str, paucal: str, plural: str) -> str:
+        if value is None:
+            return plural
+        n = abs(value) % 100
+        last_digit = n % 10
+        if 11 <= n <= 14:
+            return plural
+        if last_digit == 1:
+            return singular
+        if 2 <= last_digit <= 4:
+            return paucal
+        return plural
+
     eo_articles = stats["eo"].get("articles", 0)
     eo_words = stats["eo"].get("words", 0)
 
@@ -841,8 +854,12 @@ def _write_status_file(
 
     content = (
         "Открыты для поиска:\n"
-        f"большой эсперанто-русский словарь в актуальной редакции, {eo_words} cлова в {eo_articles} словарных статьях;\n"
-        f"рабочие материалы большого русско-эсперантского словаря ({range_text}), {ru_ready_words} cлов в {ru_ready_articles} словарных статьях."
+        f"большой эсперанто-русский словарь в актуальной редакции, "
+        f"{eo_words} {_rus_plural(eo_words, 'слово', 'слова', 'слов')} "
+        f"в {eo_articles} {_rus_plural(eo_articles, 'словарной статье', 'словарных статьях', 'словарных статьях')};\n"
+        f"рабочие материалы большого русско-эсперантского словаря ({range_text}), "
+        f"{ru_ready_words} {_rus_plural(ru_ready_words, 'слово', 'слова', 'слов')} "
+        f"в {ru_ready_articles} {_rus_plural(ru_ready_articles, 'словарной статье', 'словарных статьях', 'словарных статьях')}."
     )
     klarigo_path = tekstoj_dir / "klarigo.md"
     try:
