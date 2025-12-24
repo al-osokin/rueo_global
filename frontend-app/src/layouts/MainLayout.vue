@@ -386,33 +386,29 @@ export default defineComponent({
       this.dialogVisible = true;
     },
     async orph_send() {
-      let postData = new FormData();
-      postData.append("url", this.formLink);
-      postData.append("text", this.formText);
-      postData.append("comment", this.formComment);
-      postData.append("key", this.formKey);
-      let postDataSerialized = Array.from(postData, (e) =>
-        e.map(encodeURIComponent).join("=")
-      ).join("&");
+      const params = new URLSearchParams();
+      params.append("url", this.formLink);
+      params.append("text", this.formText);
+      params.append("comment", this.formComment);
+      params.append("key", this.formKey);
 
-      
-      // Показываем уведомление сразу (оптимистичный подход)
-      this.$q.notify({
-        type: "positive",
-        message: "Сообщение отправлено",
-      });
-      this.orph_reset();
-      
-      // Отправляем в фоне, не дожидаясь ответа
-      this.$axios.post(
-        "/orph.php",
-        postDataSerialized,
-        { timeout: 60000 } // 60 секунд таймаут
-      ).then(res => {
-        // Ответ получен
-      }).catch(error => {
-        // Запрос может быть прерван, но письмо отправляется в фоне
-      });
+      try {
+        await this.$axios.post("/orph", params, {
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          timeout: 60000,
+        });
+        this.$q.notify({
+          type: "positive",
+          message: "Сообщение отправлено",
+        });
+        this.orph_reset();
+      } catch (error) {
+        console.error("Не удалось отправить сообщение об ошибке", error);
+        this.$q.notify({
+          type: "negative",
+          message: "Не удалось отправить сообщение",
+        });
+      }
     },
     orph_reset() {
       this.formLink = "";
