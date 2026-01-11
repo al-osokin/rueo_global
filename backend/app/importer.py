@@ -183,11 +183,27 @@ def _load_previous_update_date(data_dir: Path) -> Optional[date]:
     return None
 
 
+def _parse_run_at(value: str) -> Optional[datetime]:
+    value = (value or "").strip()
+    if not value:
+        return None
+    for fmt in ("%Y-%m-%dT%H:%M:%S", "%Y-%m-%d %H:%M:%S", "%Y-%m-%d"):
+        try:
+            parsed = datetime.strptime(value, fmt)
+            if fmt == "%Y-%m-%d":
+                return datetime.combine(parsed.date(), datetime.min.time())
+            return parsed
+        except ValueError:
+            continue
+    return None
+
+
 def run_import(
     data_dir: Path,
     truncate: bool = True,
     status_callback: Optional[ProgressCallback] = None,
     last_ru_letter: Optional[str] = None,
+    run_at: Optional[datetime] = None,
 ) -> None:
     data_dir = data_dir.resolve()
     init_db()
@@ -195,7 +211,8 @@ def run_import(
     notify = _make_notifier(status_callback)
     notify("initializing", message="Старт импорта данных")
 
-    run_time = datetime.now()
+    env_run_at = _parse_run_at(os.getenv("RUEO_IMPORT_RUN_AT", ""))
+    run_time = run_at or env_run_at or datetime.now()
     previous_update_date = _load_previous_update_date(data_dir)
     eo_summary: Dict[str, int] = {}
     ru_summary: Dict[str, int] = {}
@@ -957,6 +974,14 @@ def parse_args(argv: Optional[Iterable[str]] = None) -> argparse.Namespace:
         type=str,
         help="Последнее готовое слово для Ру→Эо словаря (например, прегрешить). Если не указано, берётся из last-ru-letter.txt.",
     )
+    parser.add_argument(
+        "--run-at",
+        type=str,
+        help=(
+            "Фиксированное время запуска импорта для трекинга статей (формат: YYYY-MM-DD или YYYY-MM-DD HH:MM:SS). "
+            "Также можно задать через RUEO_IMPORT_RUN_AT."
+        ),
+    )
     return parser.parse_args(argv)
 
 
@@ -966,10 +991,12 @@ def main(argv: Optional[Iterable[str]] = None) -> None:
         level=logging.INFO if not args.verbose else logging.DEBUG,
         format="%(levelname)s %(message)s",
     )
+    run_at = _parse_run_at(args.run_at) if getattr(args, "run_at", None) else None
     run_import(
         args.data_dir,
         truncate=not args.no_truncate,
         last_ru_letter=args.last_ru_letter,
+        run_at=run_at,
     )
 
 
