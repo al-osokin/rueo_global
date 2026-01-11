@@ -153,3 +153,10 @@ slovari_vortaro.sql
 postgres_data/
 References/
 backend/data/
+
+# Local dumps / temp
+/tmp/
+/temp/
+*.dump
+*.sql
+
