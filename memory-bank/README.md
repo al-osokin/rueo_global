@@ -24,6 +24,7 @@
 - **Ориентация/контекст:** `docs/Agents.md`, `docs/Agents.ISSUE12_CONTEXT.md`
 - **Архитектура/разбор:** `docs/PARSER_ARCHITECTURE_NOTES.md`
 - **Гайды:** `docs/MANUAL_OVERRIDE_GUIDE.md`
+- **Деплой/сервер:** `docs/DEPLOYMENT_NOTES.md`
 - **Планы/таски:**
   - `tasks/PLAN_LEGACY_PARSER_FIX.md`
   - `tasks/PLAN_ISSUE5_MULTILINE.md`
