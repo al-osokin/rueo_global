@@ -308,7 +308,7 @@
           </div>
         </div>
         <q-btn flat @click="orph" class="q-pa-none">
-          <img :src="require(`../assets/orph.png`)" height="35" width="120" />
+          <img :src="orphLogo" height="35" width="120" />
         </q-btn>
       </q-toolbar>
     </q-footer>
@@ -316,6 +316,7 @@
 </template>
 <script>
 import { defineComponent } from "vue";
+import orphLogo from "src/assets/orph.png";
 import {
   DarkVariant,
   ThemeMode,
@@ -344,6 +345,7 @@ export default defineComponent({
       formText: "",
       formComment: "",
       formKey: "2З5",
+      orphLogo,
       version:
         typeof __PACKAGE_VERSION__ !== "undefined"
           ? __PACKAGE_VERSION__
@@ -549,7 +551,7 @@ export default defineComponent({
 </script>
 <style lang="sass" scoped>
 .header-tabs-background
-  background-image: url(~assets/menu1.png)
+  background-image: url('../assets/menu1.png')
   background-position-y: 100%
 .body--dark .header-tabs-background
   background-image: linear-gradient(120deg, #0d2f45, #081521)
@@ -557,7 +559,7 @@ export default defineComponent({
   background-image: linear-gradient(120deg, #04121a, #000000 58%), radial-gradient(circle at 20% 120%, rgba(125, 211, 252, 0.18), transparent 60%)
 
 .footer-tabs-background
-  background-image: url(~assets/menu2.png)
+  background-image: url('../assets/menu2.png')
   background-position-y: 0%
 .body--dark .footer-tabs-background
   background-image: linear-gradient(120deg, #07121d, #03080c)

@@ -32,13 +32,13 @@ import {createMetaMixin} from 'quasar';
 export default {
   name: 'About',
   components: {
-    Page1: defineAsyncComponent(() => import('components/about/page1')),
-    Page2: defineAsyncComponent(() => import('components/about/page2')),
-    Page3: defineAsyncComponent(() => import('components/about/page3')),
-    Page4: defineAsyncComponent(() => import('components/about/page4')),
-    Page5: defineAsyncComponent(() => import('components/about/page5')),
-    Page6: defineAsyncComponent(() => import('components/about/page6')),
-    Page7: defineAsyncComponent(() => import('components/about/page7')),
+    Page1: defineAsyncComponent(() => import('components/about/page1.vue')),
+    Page2: defineAsyncComponent(() => import('components/about/page2.vue')),
+    Page3: defineAsyncComponent(() => import('components/about/page3.vue')),
+    Page4: defineAsyncComponent(() => import('components/about/page4.vue')),
+    Page5: defineAsyncComponent(() => import('components/about/page5.vue')),
+    Page6: defineAsyncComponent(() => import('components/about/page6.vue')),
+    Page7: defineAsyncComponent(() => import('components/about/page7.vue')),
 
   },
   data() {

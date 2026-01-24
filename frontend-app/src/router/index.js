@@ -34,9 +34,9 @@ export default route(function (/* { store, ssrContext } */) {
     },
     routes,
 
-    // Leave this as is and make changes in quasar.conf.js instead!
-    // quasar.conf.js -> build -> vueRouterMode
-    // quasar.conf.js -> build -> publicPath
+// Leave this as is and make changes in quasar.config.cjs instead!
+// quasar.config.cjs -> build -> vueRouterMode
+// quasar.config.cjs -> build -> publicPath
     history: createHistory(process.env.MODE === 'ssr' ? void 0 : process.env.VUE_ROUTER_BASE)
   })
 

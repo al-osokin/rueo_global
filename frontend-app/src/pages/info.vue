@@ -7,7 +7,7 @@
         <p v-for="(i, index) in skipo" :key="index">
           <img
             :alt="i.alt"
-            :src="require(`../assets/info/${i.img}`)"
+            :src="infoImageSrc(i.img)"
             class="circle"
           /><br />
           {{ i.desc }}<br />
@@ -17,7 +17,7 @@
         <p v-for="(i, index) in programistoj" :key="index">
           <img
             :alt="i.alt"
-            :src="require(`../assets/info/${i.img}`)"
+            :src="infoImageSrc(i.img)"
             class="circle"
           /><br />
           {{ i.desc }}<br />
@@ -27,7 +27,7 @@
         <p v-for="(i, index) in konsilantoj" :key="index">
           <img
             :alt="i.alt"
-            :src="require(`../assets/info/${i.img}`)"
+            :src="infoImageSrc(i.img)"
             class="circle"
           /><br />
           {{ i.desc }}
@@ -261,6 +261,11 @@ export default {
         },
       ],
     };
+  },
+  methods: {
+    infoImageSrc(filename) {
+      return new URL(`../assets/info/${filename}`, import.meta.url).href;
+    },
   },
   mixins: [
     createMetaMixin(function () {
