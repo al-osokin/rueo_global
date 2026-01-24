@@ -39,6 +39,23 @@ body.body--dark {
   color: var(--rueo-text-secondary);
 }
 
+body.body--dark.body--amoled {
+  --rueo-body-bg: #000000;
+  --rueo-surface: #000000;
+  --rueo-surface-alt: #070b10;
+  --rueo-text-primary: #f2f7ff;
+  --rueo-text-secondary: #b9c7d4;
+  --rueo-border-color: rgba(255, 255, 255, 0.10);
+  --rueo-link-color: #7dd3fc;
+  --rueo-link-hover: #bae6fd;
+  --rueo-card-bg: #05070b;
+  --rueo-card-featured-bg: #070b10;
+  --rueo-card-border: rgba(255, 255, 255, 0.08);
+
+  background-color: var(--rueo-body-bg);
+  color: var(--rueo-text-secondary);
+}
+
 .theme-surface {
   background-color: var(--rueo-surface) !important;
   color: var(--rueo-text-secondary) !important;
@@ -199,6 +216,11 @@ tr th {
 .body--dark .q-drawer {
   background-color: var(--rueo-surface) !important;
   color: var(--rueo-text-secondary) !important;
+}
+
+.body--dark.body--amoled .q-card,
+.body--dark.body--amoled .q-dialog .q-card {
+  background-color: var(--rueo-surface-alt) !important;
 }
 
 .body--dark .q-field__native,
