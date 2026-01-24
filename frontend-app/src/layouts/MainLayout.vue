@@ -68,6 +68,7 @@
           </q-tabs>
           <q-space />
           <q-btn
+            v-if="isDark"
             :aria-label="
               isDark
                 ? `Переключить AMOLED-режим. Сейчас ${
@@ -94,8 +95,8 @@
               {{
                 isDark
                   ? isAmoled
-                    ? "AMOLED: истинный чёрный"
-                    : "AMOLED: выключен"
+                    ? "Выключить AMOLED"
+                    : "Включить AMOLED"
                   : "AMOLED доступен только в тёмной теме"
               }}
             </q-tooltip>
@@ -366,8 +367,8 @@ export default defineComponent({
     },
     themeTooltip() {
       return this.isDark
-        ? "Включена тёмная тема"
-        : "Включена светлая тема";
+        ? "Переключить на светлую тему"
+        : "Переключить на тёмную тему";
     },
   },
   methods: {
