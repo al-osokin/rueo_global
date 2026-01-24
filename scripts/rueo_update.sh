@@ -155,6 +155,12 @@ run_local_import() {
     ${import_cmd} --data-dir "${DATA_SRC_DIR}" --last-ru-letter "$last_ru_letter")
 }
 
+is_container_running() {
+  local container="$1"
+  docker inspect "$container" >/dev/null 2>&1 && \
+    docker inspect --format='{{.State.Running}}' "$container" 2>/dev/null | grep -q 'true'
+}
+
 get_local_database_url() {
   local database_url="${DATABASE_URL:-}"
   if [[ -n "$database_url" ]]; then
@@ -163,7 +169,7 @@ get_local_database_url() {
   fi
 
   local backend_container="${LOCAL_BACKEND_CONTAINER:-rueo_backend}"
-  if docker inspect "$backend_container" >/dev/null 2>&1; then
+  if is_container_running "$backend_container"; then
     database_url="$(docker exec "$backend_container" printenv DATABASE_URL 2>/dev/null || true)"
     if [[ -n "$database_url" ]]; then
       printf '%s' "$database_url"
@@ -189,18 +195,29 @@ dump_local_db() {
   password="$(printf '%s' "$meta" | json_get password)"
   dbname="$(printf '%s' "$meta" | json_get dbname)"
 
+  [[ -n "$user" ]] || die "Failed to extract database user from DATABASE_URL: $database_url"
+  [[ -n "$dbname" ]] || die "Failed to extract database name from DATABASE_URL: $database_url"
+
   local container="${LOCAL_PG_CONTAINER:-$LOCAL_PG_CONTAINER_DEFAULT}"
   docker inspect "$container" >/dev/null 2>&1 || die "Local Postgres container not found: $container"
+  is_container_running "$container" || die "Local Postgres container not running: $container"
 
   mkdir -p "${REPO_DIR}/tmp"
   local out="${REPO_DIR}/tmp/rueo_db_$(date -u +%Y%m%dT%H%M%SZ).dump"
 
   log "Dump local DB (${dbname}) using ${container} → ${out}"
-  docker exec -e PGPASSWORD="$password" "$container" \
-    pg_dump -U "$user" -d "$dbname" -F c -f "/tmp/rueo_db.dump"
+  if ! docker exec -e PGPASSWORD="$password" "$container" \
+    pg_dump -U "$user" -d "$dbname" -F c -f "/tmp/rueo_db.dump" 2>&1; then
+    die "pg_dump failed in container $container"
+  fi
 
-  docker cp "$container:/tmp/rueo_db.dump" "$out"
+  if ! docker cp "$container:/tmp/rueo_db.dump" "$out" 2>&1; then
+    die "docker cp failed to copy dump from container"
+  fi
+
   docker exec "$container" rm -f "/tmp/rueo_db.dump" >/dev/null 2>&1 || true
+
+  [[ -f "$out" ]] || die "Dump file not created: $out"
 
   printf '%s\n' "$out"
 }
@@ -208,7 +225,13 @@ dump_local_db() {
 server_get_database_url() {
   local ssh_target="${SERVER_SSH:-$SERVER_SSH_DEFAULT}"
   local backend_container="${SERVER_BACKEND_CONTAINER:-$SERVER_BACKEND_CONTAINER_DEFAULT}"
-  ssh -o BatchMode=yes "$ssh_target" "docker exec $backend_container printenv DATABASE_URL"
+
+  local database_url
+  database_url="$(ssh -o BatchMode=yes "$ssh_target" "docker exec $backend_container printenv DATABASE_URL 2>/dev/null" || true)"
+
+  [[ -n "$database_url" ]] || die "Failed to get DATABASE_URL from server container $backend_container"
+
+  printf '%s' "$database_url"
 }
 
 restore_server_db() {
@@ -241,6 +264,8 @@ restore_server_db() {
 set -euo pipefail
 
 docker inspect "$DB_CONTAINER" >/dev/null
+docker inspect --format='{{.State.Running}}' "$DB_CONTAINER" | grep -q 'true' || \
+  { echo "ERROR: Container $DB_CONTAINER is not running" >&2; exit 1; }
 
 # Stop active sessions so pg_restore can cleanly drop objects.
 docker exec -e PGPASSWORD="$PGPASSWORD" "$DB_CONTAINER" \
