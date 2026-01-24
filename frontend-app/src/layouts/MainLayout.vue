@@ -68,8 +68,41 @@
           </q-tabs>
           <q-space />
           <q-btn
+            :aria-label="
+              isDark
+                ? `Переключить AMOLED-режим. Сейчас ${
+                    isAmoled ? 'включён' : 'выключен'
+                  }`
+                : 'AMOLED доступен только в тёмной теме'
+            "
+            class="amoled-toggle-btn header-theme-btn"
+            dense
+            flat
+            round
+            icon="contrast"
+            :color="
+              isDark && isAmoled
+                ? 'cyan-3'
+                : isDark
+                  ? 'blue-grey-5'
+                  : 'blue-grey-7'
+            "
+            :disable="!isDark"
+            @click="toggleAmoled"
+          >
+            <q-tooltip>
+              {{
+                isDark
+                  ? isAmoled
+                    ? "AMOLED: истинный чёрный"
+                    : "AMOLED: выключен"
+                  : "AMOLED доступен только в тёмной теме"
+              }}
+            </q-tooltip>
+          </q-btn>
+          <q-btn
             :aria-label="`Переключить тему. Сейчас ${isDark ? 'тёмная' : 'светлая'}`"
-            class="theme-toggle-btn header-theme-btn"
+            class="theme-toggle-btn"
             dense
             flat
             round
@@ -284,12 +317,15 @@
 <script>
 import { defineComponent } from "vue";
 import {
+  DarkVariant,
   ThemeMode,
   applyTheme,
   clearThemePreference,
   detectPreferredTheme,
+  getStoredDarkVariant,
   getStoredTheme,
   listenToSystemThemeChange,
+  persistDarkVariant,
   persistThemePreference,
 } from "src/utils/theme";
 
@@ -313,6 +349,7 @@ export default defineComponent({
           ? __PACKAGE_VERSION__
           : null,
       currentTheme: ThemeMode.LIGHT,
+      currentDarkVariant: DarkVariant.DEFAULT,
       hasManualTheme: false,
       removeThemeListener: null,
     };
@@ -320,6 +357,9 @@ export default defineComponent({
   computed: {
     isDark() {
       return this.currentTheme === ThemeMode.DARK;
+    },
+    isAmoled() {
+      return this.currentDarkVariant === DarkVariant.AMOLED;
     },
     themeIcon() {
       return this.isDark ? "light_mode" : "dark_mode";
@@ -339,11 +379,17 @@ export default defineComponent({
     toggleRightDrawer: function () {
       this.rightDrawerOpen = !this.rightDrawerOpen;
     },
+    normalizeDarkVariant(value) {
+      return value === DarkVariant.AMOLED
+        ? DarkVariant.AMOLED
+        : DarkVariant.DEFAULT;
+    },
     syncThemeState() {
       const storedTheme = getStoredTheme();
+      const storedVariant = this.normalizeDarkVariant(getStoredDarkVariant());
       if (storedTheme === ThemeMode.DARK || storedTheme === ThemeMode.LIGHT) {
         this.hasManualTheme = true;
-        this.setTheme(storedTheme, false);
+        this.setTheme(storedTheme, false, storedVariant);
       } else {
         if (storedTheme) {
           clearThemePreference();
@@ -352,15 +398,24 @@ export default defineComponent({
         const initial = this.$q.dark.isActive
           ? ThemeMode.DARK
           : detectPreferredTheme();
-        this.setTheme(initial, false);
+        this.setTheme(initial, false, storedVariant);
       }
     },
-    setTheme(mode, persistPreference = false) {
+    setTheme(mode, persistPreference = false, darkVariant = this.currentDarkVariant) {
       this.currentTheme = mode;
-      applyTheme(mode);
+      this.currentDarkVariant = darkVariant;
+      applyTheme(mode, darkVariant);
       if (persistPreference) {
         persistThemePreference(mode);
+        persistDarkVariant(darkVariant);
         this.hasManualTheme = true;
+      }
+    },
+    setDarkVariant(variant, persistPreference = false) {
+      this.currentDarkVariant = variant;
+      applyTheme(this.currentTheme, variant);
+      if (persistPreference) {
+        persistDarkVariant(variant);
       }
     },
     toggleTheme() {
@@ -369,6 +424,15 @@ export default defineComponent({
     },
     onThemeToggle(value) {
       this.setTheme(value ? ThemeMode.DARK : ThemeMode.LIGHT, true);
+    },
+    toggleAmoled() {
+      if (!this.isDark) {
+        return;
+      }
+      const nextVariant = this.isAmoled
+        ? DarkVariant.DEFAULT
+        : DarkVariant.AMOLED;
+      this.setDarkVariant(nextVariant, true);
     },
 
     orph() {
@@ -489,12 +553,16 @@ export default defineComponent({
   background-position-y: 100%
 .body--dark .header-tabs-background
   background-image: linear-gradient(120deg, #0d2f45, #081521)
+.body--dark.body--amoled .header-tabs-background
+  background-image: linear-gradient(120deg, #04121a, #000000 58%), radial-gradient(circle at 20% 120%, rgba(125, 211, 252, 0.18), transparent 60%)
 
 .footer-tabs-background
   background-image: url(~assets/menu2.png)
   background-position-y: 0%
 .body--dark .footer-tabs-background
   background-image: linear-gradient(120deg, #07121d, #03080c)
+.body--dark.body--amoled .footer-tabs-background
+  background-image: linear-gradient(120deg, #01070c, #000000 62%), radial-gradient(circle at 85% -10%, rgba(38, 166, 154, 0.14), transparent 55%)
 
 .footer-text-left
   padding-left: 0
@@ -513,6 +581,9 @@ export default defineComponent({
   flex: 1
 .header-theme-btn
   margin-left: auto
+
+.amoled-toggle-btn
+  min-width: 40px
 
 .my-info
   text-align: right
