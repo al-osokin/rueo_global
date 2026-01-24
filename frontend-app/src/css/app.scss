@@ -1,9 +1,75 @@
 // app global css in SCSS form
 @import url("https://fonts.googleapis.com/css2?family=Roboto:ital,wght@0,100;0,300;0,400;0,500;0,700;0,900;1,100;1,300;1,400;1,500;1,700;1,900&display=swap");
-body {
-  color: #6a6a6a;
-  font-family: "Roboto", sans-serif;
+
+:root {
+  --rueo-body-bg: #f6f8fb;
+  --rueo-surface: #ffffff;
+  --rueo-surface-alt: #edf2f7;
+  --rueo-text-primary: #324d5b;
+  --rueo-text-secondary: #6a6a6a;
+  --rueo-border-color: rgba(50, 77, 91, 0.15);
+  --rueo-link-color: #26a6d1;
+  --rueo-link-hover: #1e85a7;
+  --rueo-card-bg: #f4f6f8;
+  --rueo-card-featured-bg: #ffffff;
+  --rueo-card-border: rgba(50, 77, 91, 0.08);
 }
+
+body {
+  background-color: var(--rueo-body-bg);
+  color: var(--rueo-text-secondary);
+  font-family: "Roboto", sans-serif;
+  transition: background-color 0.25s ease, color 0.25s ease;
+}
+
+body.body--dark {
+  --rueo-body-bg: #0b131c;
+  --rueo-surface: #15202b;
+  --rueo-surface-alt: #1d2b3a;
+  --rueo-text-primary: #eff6ff;
+  --rueo-text-secondary: #c7d4df;
+  --rueo-border-color: rgba(255, 255, 255, 0.15);
+  --rueo-link-color: #7dd3fc;
+  --rueo-link-hover: #bae6fd;
+  --rueo-card-bg: #1c2b3a;
+  --rueo-card-featured-bg: #223549;
+  --rueo-card-border: rgba(255, 255, 255, 0.12);
+
+  background-color: var(--rueo-body-bg);
+  color: var(--rueo-text-secondary);
+}
+
+body.body--dark.body--amoled {
+  --rueo-body-bg: #000000;
+  --rueo-surface: #000000;
+  --rueo-surface-alt: #070b10;
+  --rueo-text-primary: #f2f7ff;
+  --rueo-text-secondary: #b9c7d4;
+  --rueo-border-color: rgba(255, 255, 255, 0.10);
+  --rueo-link-color: #7dd3fc;
+  --rueo-link-hover: #bae6fd;
+  --rueo-card-bg: #05070b;
+  --rueo-card-featured-bg: #070b10;
+  --rueo-card-border: rgba(255, 255, 255, 0.08);
+
+  background-color: var(--rueo-body-bg);
+  color: var(--rueo-text-secondary);
+}
+
+.theme-surface {
+  background-color: var(--rueo-surface) !important;
+  color: var(--rueo-text-secondary) !important;
+  border-color: var(--rueo-border-color) !important;
+}
+
+.theme-surface-alt {
+  background-color: var(--rueo-surface-alt) !important;
+}
+
+.theme-text-primary {
+  color: var(--rueo-text-primary) !important;
+}
+
 table {
   border-collapse: collapse;
   border-spacing: 0;
@@ -14,11 +80,11 @@ h3,
 h4,
 h5,
 h6 {
-  color: #324d5b;
+  color: var(--rueo-text-primary);
 }
 
 .link-style {
-  color: #324d5b !important;
+  color: var(--rueo-text-primary) !important;
   font-weight: 300;
 }
 h1,
@@ -29,13 +95,13 @@ h3 {
   //margin: 0 0 22px;
 }
 .wrap a {
-  color: #26a6d1;
+  color: var(--rueo-link-color);
   cursor: pointer;
   text-decoration: none;
   transition: color 0.15s linear;
 }
 .wrap a:hover {
-  color: #1e85a7;
+  color: var(--rueo-link-hover);
 }
 
 .search_result {
@@ -47,20 +113,21 @@ h3 {
   font-size: 17px;
 }
 .history {
-  background: #eee;
-  color: #888;
+  background: var(--rueo-surface-alt);
+  color: var(--rueo-text-secondary);
   padding: 5px 15px;
   margin-top: 80px;
   font-size: 85%;
+  border: 1px solid var(--rueo-border-color);
 }
 hr {
   border: none;
-  border-top: 1px solid #ddd;
+  border-top: 1px solid var(--rueo-border-color);
 }
 blockquote {
   background: transparent none repeat scroll 0 0;
-  border-left: 1px solid #ccc;
-  color: #666;
+  border-left: 1px solid var(--rueo-border-color);
+  color: var(--rueo-text-secondary);
   margin: 1em 0;
   padding: 0 1em;
 }
@@ -109,12 +176,10 @@ table.usertable tr td,
 tr th {
   vertical-align: top;
   border-width: 1px;
-  border-color: #999;
+  border-color: var(--rueo-border-color);
   border-style: solid;
   padding: 4px;
-  /*font-family: Arial;*/
-  // font-size: 100%;
-  color: #444;
+  color: var(--rueo-text-secondary);
 }
 table.dtable {
   width: 100%;
@@ -125,13 +190,43 @@ table.dtable {
 table.dtable tr td {
   vertical-align: top;
   border-width: 0;
-  border-color: #999;
+  border-color: var(--rueo-border-color);
   border-style: none;
   padding: 4px;
   // font-size: 100%;
-  color: #444;
+  color: var(--rueo-text-secondary);
 }
 table.usertable tr td,
 tr th {
   // font-size:80%;
+}
+
+.body--dark .text-grey,
+.body--dark .text-grey-6,
+.body--dark .text-grey-7,
+.body--dark .text-grey-8 {
+  color: var(--rueo-text-secondary) !important;
+}
+
+.body--dark .q-card,
+.body--dark .q-dialog .q-card,
+.body--dark .q-list,
+.body--dark .q-menu,
+.body--dark .q-toolbar,
+.body--dark .q-drawer {
+  background-color: var(--rueo-surface) !important;
+  color: var(--rueo-text-secondary) !important;
+}
+
+.body--dark.body--amoled .q-card,
+.body--dark.body--amoled .q-dialog .q-card {
+  background-color: var(--rueo-surface-alt) !important;
+}
+
+.body--dark .q-field__native,
+.body--dark .q-field__label,
+.body--dark .q-field__control,
+.body--dark .q-item__label,
+.body--dark .q-item__section {
+  color: var(--rueo-text-secondary);
 }
