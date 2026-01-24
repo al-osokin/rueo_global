@@ -13,9 +13,9 @@ NEW_VERSION=$1
 
 echo "Обновление версии до $NEW_VERSION..."
 
-# 1. Обновляем версию в корневом package.json
-echo "1. Обновление package.json..."
-sed -i "s/\"version\": \".*\"/\"version\": \"$NEW_VERSION\"/" package.json
+# 1. Обновляем версию в package.json и package-lock.json
+echo "1. Обновление package.json и package-lock.json..."
+npm version "$NEW_VERSION" --no-git-tag-version
 
 # 2. Копируем в public/package.json
 echo "2. Синхронизация public/package.json..."
@@ -28,6 +28,7 @@ sed -i "s/const CACHE_VERSION = 'v.*';/const CACHE_VERSION = 'v$NEW_VERSION';/" 
 echo ""
 echo "✅ Версия обновлена до $NEW_VERSION в:"
 echo "   - package.json"
+echo "   - package-lock.json"
 echo "   - public/package.json"
 echo "   - src-pwa/custom-service-worker.js"
 echo ""

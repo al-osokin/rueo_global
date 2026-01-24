@@ -7,7 +7,6 @@
 // https://v2.quasar.dev/quasar-cli/quasar-conf-js
 
 /* eslint-env node */
-const ESLintPlugin = require("eslint-webpack-plugin");
 const { configure } = require("quasar/wrappers");
 
 module.exports = configure(function (ctx) {
@@ -41,7 +40,7 @@ module.exports = configure(function (ctx) {
       "material-icons", // optional, you are not bound to it
     ],
 
-    // Full list of options: https://v2.quasar.dev/quasar-cli/quasar-conf-js#Property%3A-build
+    // Full list of options: https://v2.quasar.dev/quasar-cli-vite/quasar-config-file#property-build
     build: {
       vueRouterMode: "history", // available values: 'hash', 'history'
       env: {
@@ -64,18 +63,11 @@ module.exports = configure(function (ctx) {
       // Options below are automatically set depending on the env, set them if you want to override
       // extractCSS: false,
 
-      // https://v2.quasar.dev/quasar-cli/handling-webpack
-      // "chain" is a webpack-chain object https://github.com/neutrinojs/webpack-chain
-      chainWebpack(chain) {
-        chain
-          .plugin("eslint-webpack-plugin")
-          .use(ESLintPlugin, [{ extensions: ["js", "vue"] }]);
-        
-        // Добавляем определение версии для использования в cache-manager
-        chain.plugin('define').tap(args => {
-          args[0]['__PACKAGE_VERSION__'] = JSON.stringify(require('./package.json').version);
-          return args;
-        });
+      extendViteConf(viteConf) {
+        viteConf.define = {
+          ...(viteConf.define || {}),
+          __PACKAGE_VERSION__: JSON.stringify(require("./package.json").version),
+        };
       },
     },
 
@@ -149,7 +141,7 @@ module.exports = configure(function (ctx) {
     // https://v2.quasar.dev/options/animations
     animations: [],
 
-    // https://v2.quasar.dev/quasar-cli/developing-ssr/configuring-ssr
+    // https://v2.quasar.dev/quasar-cli-vite/developing-ssr/configuring-ssr
     ssr: {
       pwa: false,
 
@@ -162,69 +154,18 @@ module.exports = configure(function (ctx) {
       maxAge: 1000 * 60 * 60 * 24 * 30,
       // Tell browser when a file from the server should expire from cache (in ms)
 
-      chainWebpackWebserver(chain) {
-        chain
-          .plugin("eslint-webpack-plugin")
-          .use(ESLintPlugin, [{ extensions: ["js"] }]);
-      },
-
       middlewares: [
         ctx.prod ? "compression" : "",
         "render", // keep this as last one
       ],
     },
 
-    // https://v2.quasar.dev/quasar-cli/developing-pwa/configuring-pwa
+    // https://v2.quasar.dev/quasar-cli-vite/developing-pwa/configuring-pwa
     pwa: {
-      workboxPluginMode: "InjectManifest", // 'GenerateSW' or 'InjectManifest'
+      workboxMode: "InjectManifest", // 'GenerateSW' or 'InjectManifest'
       workboxOptions: {
-        swSrc: './src-pwa/custom-service-worker.js',
-        swDest: 'service-worker.js',
-      },
-
-      // for the custom service worker ONLY (/src-pwa/custom-service-worker.[js|ts])
-      // if using workbox in InjectManifest mode
-      chainWebpackCustomSW(chain) {
-        chain
-          .plugin("eslint-webpack-plugin")
-          .use(ESLintPlugin, [{ extensions: ["js"] }]);
-      },
-
-      manifest: {
-        name: `Эсперанто словари Бориса Кондратьева`,
-        short_name: `Эсперанто словарь`,
-        description: `Поиск по эсперанто-русскому и русско-эсперантскому словарям Кондратьева`,
-        display: "standalone",
-        orientation: "portrait",
-        background_color: "#ffffff",
-        theme_color: "#32FC25",
-        icons: [
-          {
-            src: "icons/icon-128x128.png",
-            sizes: "128x128",
-            type: "image/png",
-          },
-          {
-            src: "icons/icon-192x192.png",
-            sizes: "192x192",
-            type: "image/png",
-          },
-          {
-            src: "icons/icon-256x256.png",
-            sizes: "256x256",
-            type: "image/png",
-          },
-          {
-            src: "icons/icon-384x384.png",
-            sizes: "384x384",
-            type: "image/png",
-          },
-          {
-            src: "icons/icon-512x512.png",
-            sizes: "512x512",
-            type: "image/png",
-          },
-        ],
+        swSrc: "./src-pwa/custom-service-worker.js",
+        swDest: "service-worker.js",
       },
     },
 
@@ -238,7 +179,7 @@ module.exports = configure(function (ctx) {
       hideSplashscreen: true,
     },
 
-    // Full list of options: https://v2.quasar.dev/quasar-cli/developing-electron-apps/configuring-electron
+    // Full list of options: https://v2.quasar.dev/quasar-cli-vite/developing-electron-apps/configuring-electron
     electron: {
       bundler: "packager", // 'packager' or 'builder'
 
@@ -259,19 +200,6 @@ module.exports = configure(function (ctx) {
         appId: "rueo_ru",
       },
 
-      // "chain" is a webpack-chain object https://github.com/neutrinojs/webpack-chain
-      chainWebpackMain(chain) {
-        chain
-          .plugin("eslint-webpack-plugin")
-          .use(ESLintPlugin, [{ extensions: ["js"] }]);
-      },
-
-      // "chain" is a webpack-chain object https://github.com/neutrinojs/webpack-chain
-      chainWebpackPreload(chain) {
-        chain
-          .plugin("eslint-webpack-plugin")
-          .use(ESLintPlugin, [{ extensions: ["js"] }]);
-      },
     },
     bin: {
       linuxAndroidStudio:

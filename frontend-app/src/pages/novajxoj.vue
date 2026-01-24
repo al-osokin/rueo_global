@@ -16,7 +16,7 @@
 </template>
 
 <script>
-import NewsFeed from 'components/NewsFeed'
+import NewsFeed from 'components/NewsFeed.vue'
 
 export default {
   name: 'NovajxojPage',

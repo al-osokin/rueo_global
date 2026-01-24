@@ -116,7 +116,7 @@
 import { api } from "boot/axios";
 import { createMetaMixin, date } from "quasar";
 import { replacementsDictionary } from "src/utils/replacements";
-import NewsFeed from "components/NewsFeed";
+import NewsFeed from "components/NewsFeed.vue";
 
 export default {
   name: "PageIndex",
