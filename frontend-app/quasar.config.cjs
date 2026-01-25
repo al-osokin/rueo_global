@@ -8,6 +8,7 @@
 
 /* eslint-env node */
 const { configure } = require("quasar/wrappers");
+const appVersion = require("./package.json").version;
 
 module.exports = configure(function (ctx) {
   const apiTarget = process.env.API_BASE_URL || "http://localhost:8000";
@@ -66,7 +67,7 @@ module.exports = configure(function (ctx) {
       extendViteConf(viteConf) {
         viteConf.define = {
           ...(viteConf.define || {}),
-          __PACKAGE_VERSION__: JSON.stringify(require("./package.json").version),
+          __PACKAGE_VERSION__: JSON.stringify(appVersion),
         };
       },
     },
@@ -162,6 +163,7 @@ module.exports = configure(function (ctx) {
 
     // https://v2.quasar.dev/quasar-cli-vite/developing-pwa/configuring-pwa
     pwa: {
+      manifestFilename: `manifest-${appVersion}.json`,
       workboxMode: "InjectManifest", // 'GenerateSW' or 'InjectManifest'
       workboxOptions: {
         swSrc: "./src-pwa/custom-service-worker.js",
