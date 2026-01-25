@@ -22,6 +22,13 @@ The frontend currently uses Quasar CLI (webpack) via `@quasar/app`. Dev-only vul
 3. Update `quasar.config.cjs` to Vite-style config and defines.
 4. Install dependencies, run audit, and build to validate.
 
+## Implementation Notes
+- Vite requires `frontend-app/index.html` instead of `src/index.template.html`.
+- PWA manifest is sourced from `src-pwa/manifest.json`; output is versioned via `manifestFilename`.
+- `register-service-worker` and `workbox-build` are required for PWA builds with InjectManifest.
+- Early theme bootstrap is handled in `index.html` to avoid white flash before Quasar boots.
+- PWA splash background is enforced by baking a dark background into `public/icons/icon-*.png`.
+
 ## Open Questions
 - What Node version is used in CI/deploy builders?
 - Do we want ESLint to run during dev server start, or keep it as a separate `npm run lint`?

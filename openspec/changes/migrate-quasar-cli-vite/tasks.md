@@ -1,6 +1,11 @@
 ## 1. Implementation
-- [ ] 1.1 Verify Node/npm version compatibility for `@quasar/app-vite`.
-- [ ] 1.2 Update `frontend-app/package.json` to use `@quasar/app-vite` and remove webpack-only deps.
-- [ ] 1.3 Migrate `frontend-app/quasar.config.cjs` from webpack config to Vite equivalents.
-- [ ] 1.4 Update lockfile and docs (npm install, README if needed).
-- [ ] 1.5 Re-run audit and build to validate the migration.
+- [x] 1.1 Verify Node/npm version compatibility for `@quasar/app-vite`.
+- [x] 1.2 Update `frontend-app/package.json` to use `@quasar/app-vite` and remove webpack-only deps.
+- [x] 1.3 Migrate `frontend-app/quasar.config.cjs` from webpack config to Vite equivalents.
+- [x] 1.4 Update lockfile and docs (npm install, README if needed).
+- [x] 1.5 Re-run audit and build to validate the migration.
+- [x] 1.6 Replace `src/index.template.html` with `index.html` (Vite entry).
+- [x] 1.7 Add `src-pwa/manifest.json` and versioned manifest output.
+- [x] 1.8 Ensure PWA dependencies (`register-service-worker`, `workbox-build`).
+- [x] 1.9 Update bump script to keep lockfile and manifest filename in sync.
+- [x] 1.10 Bake dark background into PWA icons for splash consistency.

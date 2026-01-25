@@ -20,4 +20,7 @@ export default boot(() => {
       ? stored
       : detectPreferredTheme();
   applyTheme(initialMode, initialVariant);
+  if (typeof document !== "undefined") {
+    document.documentElement.removeAttribute("data-initial-theme");
+  }
 });
