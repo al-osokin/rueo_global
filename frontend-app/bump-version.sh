@@ -2,10 +2,34 @@
 # Скрипт для обновления версии приложения во всех необходимых местах
 
 set -e
+set -o pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$SCRIPT_DIR"
+
+if ! command -v npm >/dev/null 2>&1; then
+  echo "Ошибка: npm не найден. Установите Node.js/npm и повторите попытку."
+  exit 1
+fi
 
 if [ -z "$1" ]; then
   echo "Использование: ./bump-version.sh <новая_версия>"
   echo "Пример: ./bump-version.sh 0.1.2"
+  exit 1
+fi
+
+if [ ! -f "package.json" ]; then
+  echo "Ошибка: package.json не найден в $SCRIPT_DIR"
+  exit 1
+fi
+
+if [ ! -f "src-pwa/custom-service-worker.js" ]; then
+  echo "Ошибка: src-pwa/custom-service-worker.js не найден"
+  exit 1
+fi
+
+if [ ! -f "quasar.config.cjs" ]; then
+  echo "Ошибка: quasar.config.cjs не найден"
   exit 1
 fi
 
@@ -25,12 +49,25 @@ cp package.json public/package.json
 echo "3. Обновление custom-service-worker.js..."
 sed -i "s/const CACHE_VERSION = 'v.*';/const CACHE_VERSION = 'v$NEW_VERSION';/" src-pwa/custom-service-worker.js
 
+# 4. Обновляем manifestFilename, если он статически задан
+echo "4. Проверка manifestFilename в quasar.config.cjs..."
+if grep -q "manifestFilename" quasar.config.cjs; then
+  if grep -q "manifest-\${" quasar.config.cjs; then
+    echo "   manifestFilename уже использует версию из package.json"
+  else
+    sed -i "s/manifestFilename:.*$/manifestFilename: \"manifest-$NEW_VERSION.json\",/" quasar.config.cjs
+  fi
+else
+  echo "   Внимание: manifestFilename не найден (используется manifest.json по умолчанию)"
+fi
+
 echo ""
 echo "✅ Версия обновлена до $NEW_VERSION в:"
 echo "   - package.json"
 echo "   - package-lock.json"
 echo "   - public/package.json"
 echo "   - src-pwa/custom-service-worker.js"
+echo "   - quasar.config.cjs (manifestFilename)"
 echo ""
 echo "Следующие шаги:"
 echo "1. Проверьте изменения: git diff"

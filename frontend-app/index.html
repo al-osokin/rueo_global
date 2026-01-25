@@ -15,6 +15,20 @@
       content="user-scalable=no, initial-scale=1, maximum-scale=1, minimum-scale=1, width=device-width"
       name="viewport"
     />
+    <style>
+      html[data-initial-theme="dark"],
+      html[data-initial-theme="dark"] body,
+      html[data-initial-theme="dark"] #q-app {
+        background-color: #0b131c;
+        color: #c7d4df;
+      }
+      html[data-initial-theme="amoled"],
+      html[data-initial-theme="amoled"] body,
+      html[data-initial-theme="amoled"] #q-app {
+        background-color: #000000;
+        color: #b9c7d4;
+      }
+    </style>
     <link
       rel="icon"
       type="image/png"
@@ -132,6 +146,38 @@
     />
   </head>
   <body>
+    <script>
+      (function () {
+        try {
+          var storedTheme = localStorage.getItem("rueo_theme_preference");
+          var storedVariant = localStorage.getItem("rueo_theme_dark_variant");
+          var prefersDark =
+            window.matchMedia &&
+            window.matchMedia("(prefers-color-scheme: dark)").matches;
+          var isDark = storedTheme
+            ? storedTheme === "dark"
+            : prefersDark;
+          var isAmoled = isDark && storedVariant === "amoled";
+
+          if (isDark) {
+            document.body.classList.add("body--dark");
+            if (isAmoled) {
+              document.body.classList.add("body--amoled");
+              document.documentElement.setAttribute(
+                "data-initial-theme",
+                "amoled"
+              );
+            } else {
+              document.documentElement.setAttribute(
+                "data-initial-theme",
+                "dark"
+              );
+            }
+          }
+        } catch (error) {
+        }
+      })();
+    </script>
     <!-- quasar:entry-point -->
     <!-- Настройки для reformal  -->
     <script type="text/javascript">
