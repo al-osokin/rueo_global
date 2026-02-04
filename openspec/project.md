@@ -49,6 +49,7 @@ Key paths
 - Search logic: `backend/app/services/search.py`.
 - Article tracking: `backend/app/services/article_tracking.py`.
 - Update pipeline script: `scripts/rueo_update.sh`.
+- Structure checker: `scripts/check_structure_issues.py` - validates source files without full import.
 - Compose (local): `docker-compose.yml`.
 - Memory bank: `memory-bank/*`, `frontend-app/memory-bank/*`.
 

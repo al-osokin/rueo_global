@@ -70,6 +70,13 @@ def _make_notifier(callback: Optional[ProgressCallback]) -> ProgressCallback:
     return _notify
 
 
+# Файлы с ожидаемыми структурными особенностями (исключения из отчёта)
+STRUCTURE_ISSUE_EXCEPTIONS = {
+    "eo": ["w.txt"],  # w.txt содержит служебные строки \head\ и \p\ после заголовков
+    "ru": [],
+}
+
+
 def _detect_structure_issues(lines: Sequence[str]) -> List[Dict[str, Any]]:
     issues: List[Dict[str, Any]] = []
     idx = 0
@@ -354,17 +361,26 @@ def _process_language(
         previous_update_date=previous_update_date,
     )
     structure_alerts: Dict[str, List[Dict[str, Any]]] = {}
+    exceptions = STRUCTURE_ISSUE_EXCEPTIONS.get(lang, [])
 
     for index, file_path in enumerate(files, start=1):
         entries, file_structure_issues = _parse_articles(file_path)
         if file_structure_issues:
             rel_path_str = str(Path(lang_dir_name) / file_path.name)
-            structure_alerts[rel_path_str] = file_structure_issues
-            LOGGER.warning(
-                "Обнаружены структурные проблемы в %s (%d шт.)",
-                rel_path_str,
-                len(file_structure_issues),
-            )
+            # Пропускаем файлы в списке исключений
+            if file_path.name not in exceptions:
+                structure_alerts[rel_path_str] = file_structure_issues
+                LOGGER.warning(
+                    "Обнаружены структурные проблемы в %s (%d шт.)",
+                    rel_path_str,
+                    len(file_structure_issues),
+                )
+            else:
+                LOGGER.info(
+                    "Пропускаем структурные проблемы в исключённом файле %s (%d шт.)",
+                    rel_path_str,
+                    len(file_structure_issues),
+                )
         if not entries:
             if progress_callback:
                 progress_callback(
@@ -886,9 +902,46 @@ def _write_status_file(
 
     tracking_summary = {
         "run_at": stats.get("meta", {}).get("run_at") or run_time.isoformat(),
-        "eo": stats.get("eo", {}).get("tracking", {}),
-        "ru": stats.get("ru", {}).get("tracking", {}),
+        "eo": {
+            "tracking": stats.get("eo", {}).get("tracking", {}),
+        },
+        "ru": {
+            "tracking": stats.get("ru", {}).get("tracking", {}),
+        },
     }
+
+    # Добавляем информацию о структурных проблемах
+    for lang in ["eo", "ru"]:
+        structure_issues = stats.get(lang, {}).get("structure_issues", {})
+        if structure_issues:
+            tracking_summary[lang]["structure_issues"] = {
+                "total": structure_issues.get("total", 0),
+                "files_with_issues": len(structure_issues.get("files", {})),
+                "files": {k: len(v) for k, v in structure_issues.get("files", {}).items()},
+            }
+            # Добавляем детализацию для реальных проблем (не w.txt)
+            details = []
+            for file_path, issues in structure_issues.get("files", {}).items():
+                for issue in issues:
+                    if issue.get("type") == "word_without_header":
+                        details.append({
+                            "file": file_path,
+                            "line": issue.get("line"),
+                            "type": issue.get("type"),
+                            "word": issue.get("word"),
+                            "context": " ".join(issue.get("context", [])[-3:]) if issue.get("context") else "",
+                        })
+                    elif issue.get("type") == "header_without_word" and issue.get("next_line"):
+                        # Добавляем header_without_word только если есть следующая строка (реальная проблема)
+                        headers = ", ".join(h.get("header", "") for h in issue.get("headers", []))
+                        details.append({
+                            "file": file_path,
+                            "type": issue.get("type"),
+                            "headers": headers,
+                            "next_line": issue.get("next_line"),
+                        })
+            if details:
+                tracking_summary[lang]["structure_issues"]["details"] = details
     tracking_path = tekstoj_dir / "tracking-summary.json"
     try:
         tracking_path.write_text(
