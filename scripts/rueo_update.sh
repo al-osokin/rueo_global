@@ -205,7 +205,7 @@ dump_local_db() {
   mkdir -p "${REPO_DIR}/tmp"
   local out="${REPO_DIR}/tmp/rueo_db_$(date -u +%Y%m%dT%H%M%SZ).dump"
 
-  log "Dump local DB (${dbname}) using ${container} → ${out}"
+  printf '%s\n' "Dump local DB (${dbname}) using ${container} → ${out}" >&2
   if ! docker exec -e PGPASSWORD="$password" "$container" \
     pg_dump -U "$user" -d "$dbname" -F c -f "/tmp/rueo_db.dump" 2>&1; then
     die "pg_dump failed in container $container"
