@@ -2,7 +2,7 @@ import json
 from pathlib import Path
 
 from app.parsing.parser_v4.pipeline import ParsingPipelineV4
-from app.services.translation_review import build_translation_review
+from app.services.translation_review import ReviewV4AstError, build_translation_review
 
 
 FIXTURE = Path(__file__).parent / "fixtures" / "parser_v4_golden.json"
@@ -88,3 +88,74 @@ def test_v4_adapter_maps_numbered_senses_and_scope_notes_for_77(monkeypatch):
     # Sense-scoped reference notes are preserved as notes, not translation items
     assert any("[1.]" in note and "ср." in note.lower() for note in review.notes)
     assert not any("ср." in item.lower() for g in review.groups for item in g.items)
+
+
+def test_v4_only_mode_fails_fast_when_v4_ast_missing(monkeypatch):
+    monkeypatch.setenv("REVIEW_USE_PARSER_V4", "1")
+    parsed = {
+        "headword": {"raw_form": "test"},
+        "meta": {},
+        "body": [{"type": "translation", "content": [{"type": "text", "text": "fallback"}]}],
+    }
+
+    try:
+        build_translation_review(parsed)
+        assert False, "expected ReviewV4AstError"
+    except ReviewV4AstError as exc:
+        assert exc.code == "missing_v4_ast"
+        assert "meta.v4_ast" in str(exc)
+
+
+def test_v4_only_mode_fails_fast_when_v4_ast_inconsistent(monkeypatch):
+    monkeypatch.setenv("REVIEW_USE_PARSER_V4", "1")
+    parsed = {
+        "headword": {"raw_form": "test"},
+        "meta": {"v4_ast": {"forms": [{"raw": "x", "blocks": "bad"}]}},
+        "body": [],
+    }
+
+    try:
+        build_translation_review(parsed)
+        assert False, "expected ReviewV4AstError"
+    except ReviewV4AstError as exc:
+        assert exc.code == "invalid_v4_ast_blocks"
+        assert "forms[0].blocks" in str(exc)
+
+
+def test_v4_adapter_moves_trailing_parenthetical_explanations_to_notes_for_56(monkeypatch):
+    monkeypatch.setenv("REVIEW_USE_PARSER_V4", "1")
+
+    review = build_translation_review(_load_case(56))
+    assert review.groups
+
+    all_items = [item for g in review.groups for item in g.items]
+
+    # base translation remains
+    assert "разруш`ение" in all_items
+    assert "сгор`ание" in all_items
+
+    # parenthetical explanations should be notes, not duplicate translation items
+    assert not any("разруш`ение (" in item for item in all_items)
+    assert not any("сгор`ание (" in item for item in all_items)
+
+    joined_notes = "\n".join(review.notes).lower()
+    assert "под действием метеорологических факторов" in joined_notes
+    assert "в атмосфере, вследствие радиации" in joined_notes
+
+
+def test_v4_adapter_moves_trailing_parenthetical_explanations_to_notes_for_77(monkeypatch):
+    monkeypatch.setenv("REVIEW_USE_PARSER_V4", "1")
+
+    review = build_translation_review(_load_case(77))
+    assert review.groups
+
+    all_items = [item for g in review.groups for item in g.items]
+
+    # base translation remains
+    assert "лит. корнев`ая р`ифма" in all_items
+
+    # parenthetical explanations should be notes, not duplicate translation items
+    assert not any("лит. корнев`ая р`ифма (" in item for item in all_items)
+
+    joined_notes = "\n".join(review.notes).lower()
+    assert "в эсперанто называемая абортивной" in joined_notes

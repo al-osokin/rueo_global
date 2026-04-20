@@ -54,9 +54,11 @@ class ArticleReviewPayload(BaseModel):
     headword: Optional[str]
     template: Optional[str]
     success: bool
+    parse_error: Optional[str] = None
+    review_diagnostic: Optional[Dict[str, str]] = None
     parsing_status: Optional[str]
     groups: List[Dict[str, Any]]
-    auto_candidates: List[str]
+    auto_candidates: List[Any]
     resolved_translations: Dict[str, Any]
     notes: List[Dict[str, Any]]
     review_notes: List[str]

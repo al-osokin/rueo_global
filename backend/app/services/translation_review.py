@@ -13,6 +13,13 @@ from app.models import Article, ArticleRu
 from app.services.review_v4_adapter import build_translation_review_from_v4_ast
 
 
+class ReviewV4AstError(ValueError):
+    def __init__(self, code: str, message: str, *, hint: str) -> None:
+        super().__init__(message)
+        self.code = code
+        self.hint = hint
+
+
 @dataclass
 class TranslationCandidate:
     candidate_id: str
@@ -99,18 +106,17 @@ def build_translation_review(parsed_article: Dict) -> TranslationReview:
     meta = parsed_article.get("meta") or {}
 
     if _is_v4_review_enabled():
-        v4_ast = meta.get("v4_ast")
-        if isinstance(v4_ast, dict):
-            groups, notes = build_translation_review_from_v4_ast(
-                headword=headword,
-                v4_ast=v4_ast,
-                make_group=TranslationGroup,
-                build_candidates=_build_translation_candidates,
-                select_candidate=_select_candidate,
-                clean_spacing=_clean_spacing,
-                split_items_from_raw=_split_items_from_raw,
-            )
-            return TranslationReview(headword=headword, groups=groups, notes=notes)
+        v4_ast = _require_v4_ast(parsed_article)
+        groups, notes = build_translation_review_from_v4_ast(
+            headword=headword,
+            v4_ast=v4_ast,
+            make_group=TranslationGroup,
+            build_candidates=_build_translation_candidates,
+            select_candidate=_select_candidate,
+            clean_spacing=_clean_spacing,
+            split_items_from_raw=_split_items_from_raw,
+        )
+        return TranslationReview(headword=headword, groups=groups, notes=notes)
 
     lang = meta.get("lang")
     art_id = meta.get("art_id")
@@ -124,8 +130,51 @@ def build_translation_review(parsed_article: Dict) -> TranslationReview:
 
 
 def _is_v4_review_enabled() -> bool:
-    raw = os.getenv("REVIEW_USE_PARSER_V4", "0").strip().lower()
+    raw = os.getenv("REVIEW_USE_PARSER_V4", "1").strip().lower()
     return raw in {"1", "true", "yes", "on"}
+
+
+def _require_v4_ast(parsed_article: Dict[str, Any]) -> Dict[str, Any]:
+    meta = parsed_article.get("meta") if isinstance(parsed_article, dict) else None
+    if not isinstance(meta, dict):
+        raise ReviewV4AstError(
+            "missing_meta",
+            "Review v4 mode requires parsed.meta to be an object.",
+            hint="Reparse article with parser v4 and include meta.v4_ast in payload.",
+        )
+
+    v4_ast = meta.get("v4_ast")
+    if not isinstance(v4_ast, dict):
+        raise ReviewV4AstError(
+            "missing_v4_ast",
+            "Review v4 mode requires meta.v4_ast, but it is missing.",
+            hint="Enable parser v4 payload generation before opening review.",
+        )
+
+    forms = v4_ast.get("forms")
+    if not isinstance(forms, list) or not forms:
+        raise ReviewV4AstError(
+            "invalid_v4_ast_forms",
+            "meta.v4_ast.forms must be a non-empty array for review v4 mode.",
+            hint="Reparse article with parser v4 to regenerate structural forms.",
+        )
+
+    for idx, form in enumerate(forms):
+        if not isinstance(form, dict):
+            raise ReviewV4AstError(
+                "invalid_v4_ast_form_entry",
+                f"meta.v4_ast.forms[{idx}] must be an object.",
+                hint="Check serializer consistency for parser v4 payload.",
+            )
+        blocks = form.get("blocks")
+        if not isinstance(blocks, list):
+            raise ReviewV4AstError(
+                "invalid_v4_ast_blocks",
+                f"meta.v4_ast.forms[{idx}].blocks must be an array.",
+                hint="Reparse article and verify parser v4 block emission.",
+            )
+
+    return v4_ast
 
 
 

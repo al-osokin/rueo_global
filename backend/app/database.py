@@ -15,7 +15,7 @@ Base = declarative_base()
 def _database_url() -> str:
     return os.getenv(
         "DATABASE_URL",
-        "postgresql://rueo_user:rueo_password@localhost:5432/rueo_db",
+        "postgresql://rueo_user:rueo_password@localhost:5432/rueo_stage2",
     )
 
 

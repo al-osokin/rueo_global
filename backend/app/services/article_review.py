@@ -239,6 +239,8 @@ class ArticleReviewService:
             "headword": result.headword,
             "template": result.template,
             "success": result.success,
+            "parse_error": result.error,
+            "review_diagnostic": result.review_diagnostic,
             "parsing_status": state.parsing_status,
             "groups": groups_payload,
             "auto_candidates": auto_candidates,
@@ -378,7 +380,21 @@ class ArticleReviewService:
         review_data = result.review
         
         if not review_data:
-            return {"groups": [], "auto_candidates": [], "notes": []}
+            return {
+                "art_id": art_id,
+                "lang": lang,
+                "headword": result.headword,
+                "template": result.template,
+                "success": result.success,
+                "parse_error": result.error,
+                "review_diagnostic": result.review_diagnostic,
+                "parsing_status": state.parsing_status,
+                "groups": [],
+                "auto_candidates": [],
+                "resolved_translations": state.resolved_translations or {},
+                "notes": notes,
+                "review_notes": [],
+            }
         
         # Остальная логика как в load_article
         resolved = state.resolved_translations or {}
@@ -466,9 +482,19 @@ class ArticleReviewService:
             notes_payload.extend([{"id": None, "author": "system", "body": note, "created_at": None} for note in review_notes])
         
         return {
+            "art_id": art_id,
+            "lang": lang,
+            "headword": result.headword,
+            "template": result.template,
+            "success": result.success,
+            "parse_error": result.error,
+            "review_diagnostic": result.review_diagnostic,
+            "parsing_status": state.parsing_status,
             "groups": groups_payload,
             "auto_candidates": auto_candidates,
+            "resolved_translations": resolved,
             "notes": notes_payload,
+            "review_notes": review_notes,
         }
 
     def _ensure_state(self, lang: str, art_id: int) -> ArticleParseState:

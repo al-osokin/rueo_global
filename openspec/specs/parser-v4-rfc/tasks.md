@@ -3,7 +3,7 @@
 ## T1. Feature flag + wiring
 - [x] Добавить выбор движка парсинга через `PARSER_ENGINE=legacy|v3|v4|hybrid`
 - [x] Оставить `v3` дефолтом
-- [ ] Подготовить безопасный fallback на `v3` при ошибке v4
+- [ ] Вместо fallback на `v3`: fail-fast + отчёт об ошибке + фиксация кейса в golden (локальный режим разработки)
 
 ## T2. v4 structural AST (MVP)
 - [x] Новый модуль `backend/app/parsing/parser_v4/`
@@ -31,3 +31,18 @@
 - [ ] Интерфейс `semantic_resolver.resolve(block)`
 - [ ] Протокол JSON schema для LLM
 - [ ] Флаги confidence / needs_human_review
+
+
+## Этап 1 (сейчас, блокирующее)
+- [ ] Довести deterministic line-merge (continuation/numbered/token separators)
+- [ ] Довести tilde expansion (`~a`, `~ig/o`) на golden наборе
+- [ ] Snapshot AST + smoke legacy/v4 сравнение для 1,2,3,6,56,77
+
+## Этап 2 (после стабилизации v4)
+- [ ] Включить v4 как единственный engine для локального review
+- [ ] Legacy оставить только как архивный код до удаления
+
+## Этап 3 (Gemma integration)
+- [ ] `semantic_resolver.resolve(block)` + JSON schema
+- [ ] confidence / needs_human_review
+- [ ] UI-цикл: предложить -> принять/править -> сохранить сигнал

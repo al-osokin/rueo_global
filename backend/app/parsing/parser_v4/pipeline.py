@@ -101,6 +101,19 @@ def _looks_like_eo_ru_example(text: str) -> bool:
     return has_latin and has_cyr
 
 
+def _is_separator_token(text: str) -> bool:
+    stripped = text.strip()
+    if not stripped:
+        return False
+    if stripped in {"@", "@@", "§", "¶"}:
+        return True
+    if re.match(r"^[@#]+$", stripped):
+        return True
+    if re.match(r"^[-—=]{2,}$", stripped):
+        return True
+    return False
+
+
 @dataclass
 class StructuralBlock:
     type: str
@@ -259,7 +272,9 @@ class ParsingPipelineV4:
             return
 
         # Minimal deterministic classification; semantics later
-        if text.startswith("_"):
+        if _is_separator_token(text):
+            block_type = "separator"
+        elif text.startswith("_"):
             block_type = "note"
         elif _looks_like_eo_ru_example(text):
             block_type = "example_raw"
@@ -291,8 +306,10 @@ class ParsingPipelineV4:
 
         prev = form.blocks[-1]
 
-        # Никогда не склеиваем примеры/новые numbered-блоки с предыдущим.
-        if block_type == "example_raw":
+        # Жёсткие границы: examples/numbered/separators никогда не склеиваются.
+        if block_type in {"example_raw", "separator"}:
+            return False
+        if prev.type == "separator":
             return False
 
         # Не склеиваем строку, которая сама выглядит началом numbered-смысла.
@@ -320,7 +337,11 @@ class ParsingPipelineV4:
 
         if first.startswith("~") and main_expanded:
             suffix = first[1:]
-            base = re.sub(r"[aeiou]$", "", main_expanded) if suffix and suffix[0].isalpha() else main_expanded
+            base = main_expanded
+            # Деривационные продолжения (~a, ~o, ~ig/o и т.п.)
+            # цепляются к основе без финальной тематической гласной.
+            if suffix and suffix[0].isalpha():
+                base = re.sub(r"[aeiou]$", "", base)
             return _lemma(base + suffix)
 
         return _lemma(first)

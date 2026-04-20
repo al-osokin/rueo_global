@@ -12,6 +12,7 @@ from app.services.translation_review import (
     apply_candidate_selection,
     build_translation_review,
     collect_translation_phrases,
+    ReviewV4AstError,
 )
 
 
@@ -32,6 +33,7 @@ class ArticleParseResult:
     raw: Optional[Dict] = None
     error: Optional[str] = None
     review: Optional[Any] = None  # TranslationReview, но для избежания circular import используем Any
+    review_diagnostic: Optional[Dict[str, str]] = None
 
     def to_dict(self) -> Dict:
         data = asdict(self)
@@ -265,7 +267,17 @@ class ArticleParserService:
         parsed["meta"]["lang"] = lang
         success = bool(headword)
         examples = self._extract_examples(parsed)
-        review = build_translation_review(parsed)
+        review = None
+        review_diagnostic: Optional[Dict[str, str]] = None
+        try:
+            review = build_translation_review(parsed)
+        except ReviewV4AstError as exc:
+            success = False
+            review_diagnostic = {
+                "code": exc.code,
+                "message": str(exc),
+                "hint": exc.hint,
+            }
 
         resolved = self.session.execute(
             select(ArticleParseState.resolved_translations)
@@ -286,6 +298,23 @@ class ArticleParserService:
                             cleaned = phrase.strip()
                             if cleaned and cleaned not in manual_phrases:
                                 manual_phrases.append(cleaned)
+
+        if review is None:
+            return ArticleParseResult(
+                art_id=art_id,
+                lang=lang,
+                success=False,
+                template=template,
+                headword=headword,
+                examples=examples,
+                example_count=len(examples),
+                translations=[],
+                needs_review=True,
+                raw=parsed if include_raw else None,
+                error=(review_diagnostic or {}).get("code", "review_v4_error"),
+                review=None,
+                review_diagnostic=review_diagnostic,
+            )
 
         apply_candidate_selection(review, resolved_groups)
         translations = collect_translation_phrases(review, manual_phrases)
@@ -325,6 +354,7 @@ class ArticleParserService:
             raw=parsed if include_raw else None,
             error=None if success else "missing_headword",
             review=review,
+            review_diagnostic=review_diagnostic,
         )
 
     def parse_article_by_id(

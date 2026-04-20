@@ -37,7 +37,7 @@ if hasattr(legacy_parser, "KNOWN_SHORTENINGS") and not getattr(
 
 @lru_cache(maxsize=1)
 def get_parsing_pipeline() -> _ParsingPipeline:
-    engine = os.getenv("PARSER_ENGINE", "v3").lower().strip()
+    engine = os.getenv("PARSER_ENGINE", "v4").lower().strip()
     if engine == "v4":
         return ParsingPipelineV4()  # type: ignore[return-value]
     # legacy/hybrid пока идут через текущий v3 pipeline

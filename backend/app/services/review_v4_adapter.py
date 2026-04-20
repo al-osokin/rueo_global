@@ -1,11 +1,31 @@
 from __future__ import annotations
 
+import re
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 
 # NOTE:
 # This module intentionally has no imports from translation_review to avoid
 # circular dependencies. The caller injects constructors/helpers.
+
+_TRAILING_PAREN_NOTE_RE = re.compile(r"^(?P<base>.*?)(?:\s*\((?P<note>[^()]+)\)\s*[.;:]?)$")
+
+
+def _extract_trailing_parenthetical_note(raw: str) -> Tuple[str, Optional[str]]:
+    """Split 'translation (note)' into translation + note for review annotations."""
+    cleaned = (raw or "").strip()
+    if not cleaned:
+        return "", None
+    match = _TRAILING_PAREN_NOTE_RE.match(cleaned)
+    if not match:
+        return cleaned, None
+
+    base = (match.group("base") or "").strip()
+    note = (match.group("note") or "").strip()
+    if not base or not note:
+        return cleaned, None
+    return base, note
+
 
 def build_translation_review_from_v4_ast(
     *,
@@ -74,7 +94,13 @@ def build_translation_review_from_v4_ast(
                 if not ru_text:
                     # backward-compat fallback for fixtures without structured example fields
                     ru_text = raw
-                example_items = split_items_from_raw(ru_text)
+                ru_base_text, trailing_note = _extract_trailing_parenthetical_note(ru_text)
+                if trailing_note:
+                    if current_sense_number is not None:
+                        notes.append(f"{section} [{current_sense_number}.]: {trailing_note}")
+                    else:
+                        notes.append(f"{section}: {trailing_note}")
+                example_items = split_items_from_raw(ru_base_text)
                 if example_items:
                     sense_prefix = f"{current_sense_number}. " if current_sense_number is not None else ""
                     group = make_group(
@@ -100,7 +126,16 @@ def build_translation_review_from_v4_ast(
                 continue
 
             if btype in {"sense", "text_raw", "note"}:
-                current_items.extend(split_items_from_raw(raw))
+                item_raw = raw
+                # Keep explanatory trailing parenthesis as note, not as synonym duplicate.
+                if btype in {"sense", "text_raw"}:
+                    item_raw, trailing_note = _extract_trailing_parenthetical_note(raw)
+                    if trailing_note:
+                        if current_sense_number is not None:
+                            notes.append(f"{section} [{current_sense_number}.]: {trailing_note}")
+                        else:
+                            notes.append(f"{section}: {trailing_note}")
+                current_items.extend(split_items_from_raw(item_raw))
 
         flush_current()
 
