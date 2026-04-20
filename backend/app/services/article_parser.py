@@ -154,6 +154,22 @@ class ArticleParserService:
     def _extract_examples(self, parsed: Dict[str, Any]) -> List[Dict[str, Optional[str]]]:
         examples: List[Dict[str, Optional[str]]] = []
 
+        meta = parsed.get("meta") or {}
+        v4_ast = meta.get("v4_ast")
+        if isinstance(v4_ast, dict):
+            for form in v4_ast.get("forms") or []:
+                if not isinstance(form, dict):
+                    continue
+                for block in form.get("blocks") or []:
+                    if not isinstance(block, dict) or block.get("type") != "example_raw":
+                        continue
+                    eo_text = block.get("example_eo")
+                    ru_text = block.get("example_ru")
+                    if not ru_text:
+                        ru_text = block.get("raw")
+                    examples.append({"eo": eo_text, "ru": ru_text or None})
+            return [example for example in examples if example.get("eo") or example.get("ru")]
+
         def _render_ru_segments(segments: Optional[List[Dict[str, Any]]]) -> str:
             if not segments:
                 return ""

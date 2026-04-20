@@ -2,19 +2,102 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
-from app.parsing.parser_v3.text_parser import parse_headword
+
+def parse_headword_mvp(line: str) -> Tuple[Optional[Dict[str, Any]], str]:
+    """Локальный минимальный парсер заголовка для v4 (без зависимостей от parser_v3)."""
+    line = line.strip()
+
+    if not line.startswith("["):
+        return None, line
+
+    bracket_end = line.find("]")
+    if bracket_end == -1:
+        return None, line
+
+    raw_form = line[: bracket_end + 1]
+    remainder = line[bracket_end + 1 :].lstrip()
+
+    inside = raw_form[1:-1].strip()
+    if not inside:
+        return None, remainder
+
+    official_mark: Optional[Any] = None
+    if inside.startswith("*"):
+        official_mark = True
+        inside = inside[1:].lstrip()
+
+    if remainder.startswith("*"):
+        mark_match = re.match(r"^\*(\d+)", remainder)
+        if mark_match:
+            official_mark = f"*{mark_match.group(1)}"
+            remainder = remainder[len(mark_match.group(0)) :].lstrip()
+        else:
+            official_mark = True
+            remainder = remainder[1:].lstrip()
+
+    homonym: Optional[int] = None
+    homonym_match = re.search(r"\s+(\d+)$", inside)
+    if homonym_match:
+        homonym = int(homonym_match.group(1))
+        inside = inside[: homonym_match.start()].strip()
+
+    if not inside:
+        return None, remainder
+
+    parts = [p.strip() for p in inside.split(",")] if "," in inside else [inside]
+    lemmas = [{"lemma": part, "raw": part} for part in parts if part]
+    if not lemmas:
+        return None, remainder
+
+    headword: Dict[str, Any] = {
+        "raw_form": raw_form,
+        "lemmas": lemmas,
+    }
+    if official_mark is not None:
+        headword["official_mark"] = official_mark
+    if homonym is not None:
+        headword["homonym"] = homonym
+
+    return headword, remainder
+
+
+def _split_example_raw(text: str) -> Tuple[Optional[str], str]:
+    t = text.strip().strip(';').strip()
+    if not t:
+        return None, ''
+
+    tokens = t.split()
+    split_at = None
+    for idx, token in enumerate(tokens):
+        if any('а' <= ch.lower() <= 'я' or ch.lower() == 'ё' for ch in token):
+            split_at = idx
+            break
+
+    if split_at is None or split_at == 0:
+        return None, t
+
+    eo_part = ' '.join(tokens[:split_at]).strip()
+    ru_part = ' '.join(tokens[split_at:]).strip()
+    return eo_part or None, ru_part
 
 
 def _looks_like_eo_ru_example(text: str) -> bool:
-    t = text.strip().strip(';').strip()
-    if not t or ' ' not in t:
+    eo_part, ru_part = _split_example_raw(text)
+    if not eo_part or not ru_part:
         return False
-    first, rest = t.split(' ', 1)
+
+    eo_clean = eo_part.strip()
+    # Не считаем примером пронумерованные/служебные префиксы вроде "{vn} 1. ..."
+    if re.match(r"^(?:\{[^}]+\}\s*)?\d+\.$", eo_clean):
+        return False
+    if eo_clean.startswith("{"):
+        return False
+
     # heuristic: eo token usually latin-ish, ru side usually cyrillic-rich
-    has_latin = any(('a' <= ch.lower() <= 'z') or ch in 'ĉĝĥĵŝŭ' for ch in first)
-    has_cyr = any('а' <= ch.lower() <= 'я' or ch.lower() == 'ё' for ch in rest)
+    has_latin = any(('a' <= ch.lower() <= 'z') or ch in 'ĉĝĥĵŝŭ' for ch in eo_part)
+    has_cyr = any('а' <= ch.lower() <= 'я' or ch.lower() == 'ё' for ch in ru_part)
     return has_latin and has_cyr
 
 
@@ -24,6 +107,8 @@ class StructuralBlock:
     raw: str
     number: Optional[int] = None
     indent: int = 0
+    example_eo: Optional[str] = None
+    example_ru: Optional[str] = None
 
 
 @dataclass
@@ -58,13 +143,15 @@ class ParsingPipelineV4:
             for block in form.get("blocks") or []:
                 if not isinstance(block, dict):
                     continue
-                children.append(
-                    {
-                        "type": block.get("type") or "text_raw",
-                        "raw": block.get("raw") or "",
-                        "number": block.get("number"),
-                    }
-                )
+                child = {
+                    "type": block.get("type") or "text_raw",
+                    "raw": block.get("raw") or "",
+                    "number": block.get("number"),
+                }
+                if child["type"] == "example_raw":
+                    child["example_eo"] = block.get("example_eo")
+                    child["example_ru"] = block.get("example_ru")
+                children.append(child)
             body.append(
                 {
                     "type": "headword",
@@ -75,7 +162,7 @@ class ParsingPipelineV4:
 
         headword = None
         if head_raw:
-            headword, _ = parse_headword(head_raw)
+            headword, _ = parse_headword_mvp(head_raw)
 
         if not headword:
             fallback = head_raw or "<без заголовка>"
@@ -105,7 +192,7 @@ class ParsingPipelineV4:
             indent = len(raw_line) - len(raw_line.lstrip(" \t"))
             stripped = raw_line.strip()
 
-            hw, remainder = parse_headword(stripped)
+            hw, remainder = parse_headword_mvp(stripped)
             if hw and hw.get("raw_form"):
                 raw_hw = hw["raw_form"]
                 expanded = self._expand_headword(raw_hw, main_expanded)
@@ -124,27 +211,42 @@ class ParsingPipelineV4:
 
             self._append_block(current_form, stripped, indent)
 
-        return {
-            "forms": [
+        ast_forms: List[Dict[str, Any]] = []
+        for form in forms:
+            blocks_payload: List[Dict[str, Any]] = []
+            current_sense_number: Optional[int] = None
+            for b in form.blocks:
+                if b.type == "sense":
+                    current_sense_number = b.number
+
+                scope = "sense" if current_sense_number is not None else "form"
+                block_payload: Dict[str, Any] = {
+                    "type": b.type,
+                    "raw": b.raw,
+                    "number": b.number,
+                    "indent": b.indent,
+                    "scope": scope,
+                    "sense_number": current_sense_number,
+                }
+                if b.type == "note":
+                    block_payload["note_scope"] = scope
+                if b.type == "example_raw":
+                    block_payload["example_eo"] = b.example_eo
+                    block_payload["example_ru"] = b.example_ru
+                blocks_payload.append(block_payload)
+
+            ast_forms.append(
                 {
                     "raw": form.raw,
                     "expanded": form.expanded,
-                    "blocks": [
-                        {
-                            "type": b.type,
-                            "raw": b.raw,
-                            "number": b.number,
-                            "indent": b.indent,
-                        }
-                        for b in form.blocks
-                    ],
+                    "blocks": blocks_payload,
                 }
-                for form in forms
-            ]
-        }
+            )
+
+        return {"forms": ast_forms}
 
     def _append_block(self, form: StructuralForm, text: str, indent: int) -> None:
-        m = re.match(r"^(\d+)\.\s*(.*)$", text)
+        m = re.match(r"^(?:\{[^}]+\}\s*)?(\d+)\.\s*(.*)$", text)
         if m:
             form.blocks.append(
                 StructuralBlock(
@@ -168,7 +270,20 @@ class ParsingPipelineV4:
             form.blocks[-1].raw = f"{form.blocks[-1].raw} {text.strip()}".strip()
             return
 
-        form.blocks.append(StructuralBlock(type=block_type, raw=text, indent=indent))
+        example_eo = None
+        example_ru = None
+        if block_type == "example_raw":
+            example_eo, example_ru = _split_example_raw(text)
+
+        form.blocks.append(
+            StructuralBlock(
+                type=block_type,
+                raw=text,
+                indent=indent,
+                example_eo=example_eo,
+                example_ru=example_ru,
+            )
+        )
 
     def _should_merge_with_previous(self, form: StructuralForm, *, block_type: str, indent: int, text: str) -> bool:
         if not form.blocks:
@@ -178,6 +293,10 @@ class ParsingPipelineV4:
 
         # Никогда не склеиваем примеры/новые numbered-блоки с предыдущим.
         if block_type == "example_raw":
+            return False
+
+        # Не склеиваем строку, которая сама выглядит началом numbered-смысла.
+        if re.match(r"^(?:\{[^}]+\}\s*)?\d+\.\s*", text.strip()):
             return False
 
         # Явный короткий маркер заметки (например "_ср._") оставляем отдельным блоком.

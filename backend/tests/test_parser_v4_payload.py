@@ -13,3 +13,8 @@ def test_v4_returns_minimal_payload_without_v3_pipeline_shape():
     assert parsed["body"]
     assert parsed["body"][0]["type"] == "headword"
     assert parsed["body"][0]["children"]
+
+    example = parsed["body"][0]["children"][1]
+    assert example["type"] == "example_raw"
+    assert example["example_eo"] == "ab/ampero"
+    assert "абампер" in example["example_ru"]

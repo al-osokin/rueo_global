@@ -44,19 +44,25 @@
               "type": "example_raw",
               "raw": "nov/a н`овый;",
               "number": null,
-              "indent": 2
+              "indent": 2,
+              "example_eo": "nov/a",
+              "example_ru": "н`овый"
             },
             {
               "type": "example_raw",
               "raw": "teatr/a театр`альный;",
               "number": null,
-              "indent": 2
+              "indent": 2,
+              "example_eo": "teatr/a",
+              "example_ru": "театр`альный"
             },
             {
               "type": "example_raw",
               "raw": "patr/a отц`овский;",
               "number": null,
-              "indent": 2
+              "indent": 2,
+              "example_eo": "patr/a",
+              "example_ru": "отц`овский"
             },
             {
               "type": "sense",
@@ -68,7 +74,9 @@
               "type": "example_raw",
               "raw": "mi/a мой;",
               "number": null,
-              "indent": 2
+              "indent": 2,
+              "example_eo": "mi/a",
+              "example_ru": "мой"
             },
             {
               "type": "sense",
@@ -80,13 +88,17 @@
               "type": "example_raw",
               "raw": "unu/a п`ервый;",
               "number": null,
-              "indent": 2
+              "indent": 2,
+              "example_eo": "unu/a",
+              "example_ru": "п`ервый"
             },
             {
               "type": "example_raw",
               "raw": "la 1984a jaro 1984-й год;",
               "number": null,
-              "indent": 2
+              "indent": 2,
+              "example_eo": "la 1984a jaro",
+              "example_ru": "1984-й год"
             },
             {
               "type": "sense",
@@ -98,13 +110,17 @@
               "type": "example_raw",
               "raw": "sidant/a сид`ящий;",
               "number": null,
-              "indent": 2
+              "indent": 2,
+              "example_eo": "sidant/a",
+              "example_ru": "сид`ящий"
             },
             {
               "type": "example_raw",
               "raw": "sidint/a сид`евший;",
               "number": null,
-              "indent": 2
+              "indent": 2,
+              "example_eo": "sidint/a",
+              "example_ru": "сид`евший"
             },
             {
               "type": "note",
@@ -122,13 +138,17 @@
               "type": "example_raw",
               "raw": "Ann/a `Анна;",
               "number": null,
-              "indent": 2
+              "indent": 2,
+              "example_eo": "Ann/a",
+              "example_ru": "`Анна"
             },
             {
               "type": "example_raw",
               "raw": "Olg/a `Ольга.",
               "number": null,
-              "indent": 2
+              "indent": 2,
+              "example_eo": "Olg/a",
+              "example_ru": "`Ольга."
             },
             {
               "type": "note",
@@ -146,19 +166,25 @@
               "type": "example_raw",
               "raw": "Petr/o Пётр -- Petr/a П`етра;",
               "number": null,
-              "indent": 2
+              "indent": 2,
+              "example_eo": "Petr/o",
+              "example_ru": "Пётр -- Petr/a П`етра"
             },
             {
               "type": "example_raw",
               "raw": "Aleksandr/o Алекс`андр -- Aleksandr/a Алекс`андра;",
               "number": null,
-              "indent": 2
+              "indent": 2,
+              "example_eo": "Aleksandr/o",
+              "example_ru": "Алекс`андр -- Aleksandr/a Алекс`андра"
             },
             {
               "type": "example_raw",
               "raw": "Gabriel/o Гаври`ил, Габри`эл(ь) -- Gabriel/a Габри`эла,",
               "number": null,
-              "indent": 2
+              "indent": 2,
+              "example_eo": "Gabriel/o",
+              "example_ru": "Гаври`ил, Габри`эл(ь) -- Gabriel/a Габри`эла,"
             },
             {
               "type": "note",
@@ -292,13 +318,17 @@
               "type": "example_raw",
               "raw": "beta б`ета;",
               "number": null,
-              "indent": 2
+              "indent": 2,
+              "example_eo": "beta",
+              "example_ru": "б`ета"
             },
             {
               "type": "example_raw",
               "raw": "gama г`амма.",
               "number": null,
-              "indent": 2
+              "indent": 2,
+              "example_eo": "gama",
+              "example_ru": "г`амма."
             }
           ]
         }
@@ -336,19 +366,25 @@
               "type": "example_raw",
               "raw": "ab/ampero абамп`ер, абсол`ютный амп`ер;",
               "number": null,
-              "indent": 2
+              "indent": 2,
+              "example_eo": "ab/ampero",
+              "example_ru": "абамп`ер, абсол`ютный амп`ер"
             },
             {
               "type": "example_raw",
               "raw": "ab/omo аб`ом, абсол`ютный ом;",
               "number": null,
-              "indent": 2
+              "indent": 2,
+              "example_eo": "ab/omo",
+              "example_ru": "аб`ом, абсол`ютный ом"
             },
             {
               "type": "example_raw",
               "raw": "ab/volto абв`ольт, абсол`ютный вольт.",
               "number": null,
-              "indent": 2
+              "indent": 2,
+              "example_eo": "ab/volto",
+              "example_ru": "абв`ольт, абсол`ютный вольт."
             }
           ]
         }
@@ -424,7 +460,9 @@
               "type": "example_raw",
               "raw": "{vn} 1. _мед._ в`ыкинуть плод, преждевр`еменно род`ить;",
               "number": null,
-              "indent": 0
+              "indent": 0,
+              "example_eo": "{vn} 1.",
+              "example_ru": "_мед._ в`ыкинуть плод, преждевр`еменно род`ить"
             },
             {
               "type": "note",
@@ -484,7 +522,9 @@
               "type": "example_raw",
               "raw": "~a rimo _лит._ корнев`ая р`ифма (_в эсперанто называемая абортивной_);",
               "number": null,
-              "indent": 1
+              "indent": 1,
+              "example_eo": "~a rimo",
+              "example_ru": "_лит._ корнев`ая р`ифма (_в эсперанто называемая абортивной_)"
             }
           ]
         },
@@ -514,7 +554,9 @@
               "type": "example_raw",
               "raw": "~igi sin сд`елать (себе) аб`орт;",
               "number": null,
-              "indent": 2
+              "indent": 2,
+              "example_eo": "~igi sin",
+              "example_ru": "сд`елать (себе) аб`орт"
             },
             {
               "type": "sense",

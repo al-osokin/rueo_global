@@ -109,7 +109,6 @@ def build_translation_review(parsed_article: Dict) -> TranslationReview:
                 select_candidate=_select_candidate,
                 clean_spacing=_clean_spacing,
                 split_items_from_raw=_split_items_from_raw,
-                split_example_raw=_split_example_raw,
             )
             return TranslationReview(headword=headword, groups=groups, notes=notes)
 

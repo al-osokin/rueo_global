@@ -16,7 +16,6 @@ def build_translation_review_from_v4_ast(
     select_candidate: Callable[[Any, Optional[str]], None],
     clean_spacing: Callable[[str], str],
     split_items_from_raw: Callable[[str], List[str]],
-    split_example_raw: Callable[[str], Tuple[Optional[str], str]],
 ) -> Tuple[List[Any], List[str]]:
     groups: List[Any] = []
     notes: List[str] = []
@@ -30,17 +29,20 @@ def build_translation_review_from_v4_ast(
         )
         blocks = form.get("blocks") or []
         current_items: List[str] = []
+        current_sense_number: Optional[int] = None
 
         def flush_current() -> None:
             nonlocal current_items
             items = [clean_spacing(x) for x in current_items if clean_spacing(x)]
             if items:
+                label = f"{current_sense_number}." if current_sense_number is not None else None
                 group = make_group(
                     items=items,
                     base_items=list(items),
                     auto_generated=False,
                     requires_review=False,
                     section=section,
+                    label=label,
                 )
                 group.candidates = build_candidates(group.base_items, group.items)
                 select_candidate(group, None)
@@ -59,13 +61,22 @@ def build_translation_review_from_v4_ast(
             if btype == "sense":
                 flush_current()
 
+            mapped_sense = block.get("sense_number")
+            if isinstance(mapped_sense, int):
+                current_sense_number = mapped_sense
+            elif btype == "sense" and isinstance(block.get("number"), int):
+                current_sense_number = block.get("number")
+
             if btype == "example_raw":
                 flush_current()
-                eo_source, ru_text = split_example_raw(raw)
+                eo_source = clean_spacing((block.get("example_eo") or "")) or None
+                ru_text = clean_spacing((block.get("example_ru") or ""))
                 if not ru_text:
+                    # backward-compat fallback for fixtures without structured example fields
                     ru_text = raw
                 example_items = split_items_from_raw(ru_text)
                 if example_items:
+                    sense_prefix = f"{current_sense_number}. " if current_sense_number is not None else ""
                     group = make_group(
                         items=example_items,
                         base_items=list(example_items),
@@ -73,7 +84,7 @@ def build_translation_review_from_v4_ast(
                         requires_review=False,
                         section=section,
                         eo_source=eo_source,
-                        label="пример",
+                        label=f"{sense_prefix}пример".strip(),
                     )
                     group.candidates = build_candidates(group.base_items, group.items)
                     select_candidate(group, None)
@@ -81,7 +92,11 @@ def build_translation_review_from_v4_ast(
                 continue
 
             if btype == "note" and raw.lower().startswith(("ср.", "см.")):
-                notes.append(f"{section}: {raw}")
+                note_scope = block.get("note_scope") or block.get("scope")
+                if note_scope == "sense" and current_sense_number is not None:
+                    notes.append(f"{section} [{current_sense_number}.]: {raw}")
+                else:
+                    notes.append(f"{section}: {raw}")
                 continue
 
             if btype in {"sense", "text_raw", "note"}:

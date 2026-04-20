@@ -141,3 +141,41 @@
 - Кнопка reparse стабильна (без 500).
 - В id `3/6/56/77` не теряются примеры, numbered и ссылки.
 - Для поиска доступны раскрытые формы (`~` -> full) и пары `example eo/ru`.
+
+---
+
+## UI для верификации parser-v4 + Gemma-4 (draft requirements)
+
+Цель: заменить просмотр сырого JSON интерфейсом структурной проверки и обучения.
+
+### Основные режимы
+1. **AST Review**
+   - дерево: `form -> sense -> note/reference/example`
+   - рядом исходные строки (`raw_lines`) и результат разбора
+   - подсветка подозрительных мест (merge/range/reference leakage)
+
+2. **Gemma Assist (interactive)**
+   - на выбранный блок отправляется структурный контекст (не вся статья)
+   - Gemma предлагает один или несколько вариантов нормализации
+   - оператор выбирает вариант или даёт ручную правку
+   - выбор сохраняется как `resolution` + training signal
+
+3. **Diff/Regression View**
+   - сравнение `legacy/v3` vs `v4` vs `v4+gemma`
+   - быстрые чекпоинты по golden-набору (1,2,3,6,56,77)
+
+### Что нужно хранить в данных для UI
+- `sense_number`
+- `note_scope`: `form|sense`
+- `example_eo`, `example_ru`
+- `source_span`/`raw_fragment` для трассируемости
+- `confidence`/`needs_human_review` для gemma-результатов
+- `operator_action` (accept/edit/reject)
+
+### MVP интеграции Gemma-4
+- endpoint `POST /admin/v4/resolve-block`
+  - input: `article_id`, `form_id`, `block_id`, `context`
+  - output: `candidates[]`, `confidence`, `rationale_short`
+- endpoint `POST /admin/v4/apply-resolution`
+  - сохраняет операторское решение и помечает блок как resolved
+

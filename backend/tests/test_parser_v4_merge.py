@@ -41,3 +41,45 @@ def test_id56_like_sense_continuation_merges_and_sr_note_stays_separate():
     assert "или органа_ = <fortrancxo>, <desekco>);" in blocks[0]["raw"]
     assert blocks[1]["type"] == "note"
     assert blocks[1]["raw"].startswith("_ср._")
+
+
+def test_numbered_boundary_is_not_merged_even_with_indent():
+    text = """[ablaci/o]
+1. первый смысл
+  продолжение первого
+  2. второй смысл
+"""
+    blocks = _first_form_blocks(text)
+    assert len(blocks) == 2
+    assert blocks[0]["type"] == "sense"
+    assert blocks[0]["number"] == 1
+    assert "продолжение первого" in blocks[0]["raw"]
+    assert blocks[1]["type"] == "sense"
+    assert blocks[1]["number"] == 2
+
+
+def test_id77_like_numbered_note_and_examples_keep_sense_mapping():
+    text = """[abort|i]
+{vn} 1. _мед._ в`ыкинуть плод, преждевр`еменно род`ить;
+  _ср._ <akusxi>;
+  2. _перен._ останов`иться в разв`итии;
+    ~igi sin сд`елать (себе) аб`орт;
+"""
+    blocks = _first_form_blocks(text)
+
+    assert blocks[0]["type"] == "sense"
+    assert blocks[0]["number"] == 1
+    assert blocks[0]["sense_number"] == 1
+    assert blocks[0]["scope"] == "sense"
+
+    assert blocks[1]["type"] == "note"
+    assert blocks[1]["note_scope"] == "sense"
+    assert blocks[1]["sense_number"] == 1
+
+    assert blocks[2]["type"] == "sense"
+    assert blocks[2]["number"] == 2
+    assert blocks[2]["sense_number"] == 2
+
+    assert blocks[3]["type"] == "example_raw"
+    assert blocks[3]["sense_number"] == 2
+    assert blocks[3]["scope"] == "sense"
