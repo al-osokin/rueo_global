@@ -301,7 +301,8 @@ def reparse_single_article(
 ):
     _ensure_lang(lang)
     service = ArticleReviewService(session)
-    payload, result = service.reparse_article(lang, art_id)
+    _, result = service.reparse_article(lang, art_id)
+    payload = service.load_article(lang, art_id)
     response = ArticleReparseResponse(
         article=ArticleReviewPayload(**payload),
         parse_error=result.error if not result.success else None,

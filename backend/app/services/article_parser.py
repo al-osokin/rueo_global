@@ -18,7 +18,7 @@ from app.services.translation_review import (
 SUPPORTED_LANGS = {"eo", "ru"}
 
 
-@dataclass(slots=True)
+@dataclass
 class ArticleParseResult:
     art_id: int
     lang: str

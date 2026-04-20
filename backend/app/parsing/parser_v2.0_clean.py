@@ -607,6 +607,97 @@ def extract_sentence_ending(parts: List[Dict[str, Any]]) -> str:
     return ''
 
 
+def _convert_embedded_references(nodes: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Вынос хвостов вида '; ср./см. <...>' из explanation в отдельный reference."""
+    converted: List[Dict[str, Any]] = []
+    for node in nodes:
+        if node.get('type') != 'explanation':
+            converted.append(node)
+            continue
+
+        content = node.get('content') or []
+        ref_idx = None
+        ref_mode = None
+        ref_label = None
+
+        for idx, item in enumerate(content):
+            if item.get('type') != 'text' or item.get('style') != 'italic':
+                continue
+            marker = item.get('text', '').strip().lower().rstrip('.')
+            if marker == 'ср':
+                ref_idx = idx
+                ref_mode = 'compare'
+                ref_label = 'ср.'
+                break
+            if marker == 'см':
+                ref_idx = idx
+                ref_mode = 'see'
+                ref_label = 'см.'
+                break
+
+        if ref_idx is None:
+            converted.append(node)
+            continue
+
+        tail_text = ''.join(
+            segment.get('text', '') for segment in content[ref_idx + 1:] if segment.get('type') == 'text'
+        )
+        targets = [target.strip() for target in re.findall(r'<([^>]+)>', tail_text) if target.strip()]
+        if not targets:
+            converted.append(node)
+            continue
+
+        preserved_content = content[:ref_idx]
+        if preserved_content:
+            last = preserved_content[-1]
+            if last.get('type') == 'text':
+                cleaned = last.get('text', '').rstrip()
+                if cleaned.endswith(';'):
+                    cleaned = cleaned[:-1].rstrip()
+                if cleaned:
+                    last = dict(last)
+                    last['text'] = cleaned
+                    preserved_content[-1] = last
+                else:
+                    preserved_content.pop()
+
+        if preserved_content:
+            converted.append({'type': 'explanation', 'content': preserved_content})
+
+        converted.append({
+            'type': 'reference',
+            'mode': ref_mode or 'link',
+            'text': ref_label,
+            'targets': targets,
+        })
+
+    return converted
+
+
+def _rebalance_numbered_nodes(nodes: List[Dict[str, Any]], number: int) -> List[Dict[str, Any]]:
+    """Нормализует пронумерованные значения, где после номера идёт курсивная помета."""
+    if not nodes:
+        return nodes
+
+    first = nodes[0]
+    if first.get('type') == 'explanation':
+        content = first.get('content') or []
+        if len(content) == 1 and content[0].get('type') == 'text' and content[0].get('style') == 'italic':
+            label_text = content[0].get('text', '').strip()
+            target_idx = next((i for i, n in enumerate(nodes[1:], start=1) if n.get('type') == 'translation'), None)
+            if target_idx is not None:
+                target = nodes[target_idx]
+                target_content = target.setdefault('content', [])
+                target_content.insert(0, {'type': 'label', 'text': label_text})
+                if len(target_content) > 1 and target_content[1].get('type') == 'divider' and target_content[1].get('text') == ';':
+                    target_content.pop(1)
+                target['number'] = number
+                return [target] + [n for i, n in enumerate(nodes[1:], start=1) if i != target_idx]
+
+    nodes[0]['number'] = number
+    return nodes
+
+
 def parse_headword_remainder(text: str, *, is_morpheme: bool = False) -> List[Dict[str, Any]]:
     stripped = text.strip()
     if not is_morpheme:
@@ -616,7 +707,7 @@ def parse_headword_remainder(text: str, *, is_morpheme: bool = False) -> List[Di
             remainder_text = numbered_match.group(2)
             remainder_nodes = parse_headword_remainder(remainder_text, is_morpheme=False)
             if remainder_nodes:
-                remainder_nodes[0]['number'] = number
+                remainder_nodes = _rebalance_numbered_nodes(remainder_nodes, number)
             return remainder_nodes
 
     sentence_ending = ''
@@ -910,6 +1001,7 @@ def parse_headword_remainder(text: str, *, is_morpheme: bool = False) -> List[Di
         expanded_nodes.append(node)
 
     nodes = expanded_nodes
+    nodes = _convert_embedded_references(nodes)
 
     filtered_nodes = []
     for node in nodes:
@@ -1745,6 +1837,11 @@ def process_final_tree(tree: List[Dict], in_note_context: bool = False, note_bas
 
         if processed_node['type'] == 'explanation':
             normalize_explanation(processed_node)
+            converted_explanation_nodes = _convert_embedded_references([processed_node])
+            if converted_explanation_nodes:
+                processed_node = converted_explanation_nodes[0]
+                if len(converted_explanation_nodes) > 1:
+                    extra_nodes = converted_explanation_nodes[1:] + extra_nodes
 
         if processed_node['type'] == 'note':
             block = ensure_note_block(node['indent'])

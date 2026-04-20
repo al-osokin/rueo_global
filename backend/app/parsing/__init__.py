@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import os
+
 from functools import lru_cache
 from pathlib import Path
 from typing import Any, Dict
 
 from .parser_v3.pipeline import ParsingPipeline as _ParsingPipeline
+from .parser_v4 import ParsingPipelineV4
 from .parser_v3.pipeline import ArticleContext
 from .parser_v3.legacy_bridge import legacy_parser
 
@@ -34,6 +37,10 @@ if hasattr(legacy_parser, "KNOWN_SHORTENINGS") and not getattr(
 
 @lru_cache(maxsize=1)
 def get_parsing_pipeline() -> _ParsingPipeline:
+    engine = os.getenv("PARSER_ENGINE", "v3").lower().strip()
+    if engine == "v4":
+        return ParsingPipelineV4()  # type: ignore[return-value]
+    # legacy/hybrid пока идут через текущий v3 pipeline
     return _ParsingPipeline()
 
 

@@ -1,0 +1,608 @@
+[
+  {
+    "art_id": 1,
+    "headword": "[A, a]",
+    "v4_ast": {
+      "forms": [
+        {
+          "raw": "[A, a]",
+          "expanded": "A",
+          "blocks": [
+            {
+              "type": "note",
+              "raw": "_1-я буква эсперантского алфавита_; _название этой буквы_.",
+              "number": null,
+              "indent": 0
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "art_id": 2,
+    "headword": "[-a I]",
+    "v4_ast": {
+      "forms": [
+        {
+          "raw": "[-a I]",
+          "expanded": "-a I",
+          "blocks": [
+            {
+              "type": "note",
+              "raw": "_окончание_:",
+              "number": null,
+              "indent": 0
+            },
+            {
+              "type": "sense",
+              "raw": "_прилагательных_:",
+              "number": 1,
+              "indent": 1
+            },
+            {
+              "type": "example_raw",
+              "raw": "nov/a н`овый;",
+              "number": null,
+              "indent": 2
+            },
+            {
+              "type": "example_raw",
+              "raw": "teatr/a театр`альный;",
+              "number": null,
+              "indent": 2
+            },
+            {
+              "type": "example_raw",
+              "raw": "patr/a отц`овский;",
+              "number": null,
+              "indent": 2
+            },
+            {
+              "type": "sense",
+              "raw": "_притяжательных местоимений_:",
+              "number": 2,
+              "indent": 1
+            },
+            {
+              "type": "example_raw",
+              "raw": "mi/a мой;",
+              "number": null,
+              "indent": 2
+            },
+            {
+              "type": "sense",
+              "raw": "_порядковых числительных_:",
+              "number": 3,
+              "indent": 1
+            },
+            {
+              "type": "example_raw",
+              "raw": "unu/a п`ервый;",
+              "number": null,
+              "indent": 2
+            },
+            {
+              "type": "example_raw",
+              "raw": "la 1984a jaro 1984-й год;",
+              "number": null,
+              "indent": 2
+            },
+            {
+              "type": "sense",
+              "raw": "_причастий_:",
+              "number": 4,
+              "indent": 1
+            },
+            {
+              "type": "example_raw",
+              "raw": "sidant/a сид`ящий;",
+              "number": null,
+              "indent": 2
+            },
+            {
+              "type": "example_raw",
+              "raw": "sidint/a сид`евший;",
+              "number": null,
+              "indent": 2
+            },
+            {
+              "type": "note",
+              "raw": "_прим. в порядке исключения данное окончание может употребляться",
+              "number": null,
+              "indent": 1
+            },
+            {
+              "type": "text_raw",
+              "raw": "в существительных, являющихся жен. именами_:",
+              "number": null,
+              "indent": 1
+            },
+            {
+              "type": "example_raw",
+              "raw": "Ann/a `Анна;",
+              "number": null,
+              "indent": 2
+            },
+            {
+              "type": "example_raw",
+              "raw": "Olg/a `Ольга.",
+              "number": null,
+              "indent": 2
+            },
+            {
+              "type": "note",
+              "raw": "_Первоначально это имело место для различения сходных муж.",
+              "number": null,
+              "indent": 1
+            },
+            {
+              "type": "text_raw",
+              "raw": "и жен. имён_:",
+              "number": null,
+              "indent": 1
+            },
+            {
+              "type": "example_raw",
+              "raw": "Petr/o Пётр -- Petr/a П`етра;",
+              "number": null,
+              "indent": 2
+            },
+            {
+              "type": "example_raw",
+              "raw": "Aleksandr/o Алекс`андр -- Aleksandr/a Алекс`андра;",
+              "number": null,
+              "indent": 2
+            },
+            {
+              "type": "example_raw",
+              "raw": "Gabriel/o Гаври`ил, Габри`эл(ь) -- Gabriel/a Габри`эла,",
+              "number": null,
+              "indent": 2
+            },
+            {
+              "type": "note",
+              "raw": "_поскольку эсперантизация жен. имён с помощью суффикса -in-",
+              "number": null,
+              "indent": 1
+            },
+            {
+              "type": "text_raw",
+              "raw": "и окончания -o нередко приводила к неинтернациональным и",
+              "number": null,
+              "indent": 1
+            },
+            {
+              "type": "text_raw",
+              "raw": "не совпадающим с оригиналом формам типа Aleksandr/in/o,",
+              "number": null,
+              "indent": 1
+            },
+            {
+              "type": "text_raw",
+              "raw": "Gabriel/in/o.",
+              "number": null,
+              "indent": 1
+            },
+            {
+              "type": "text_raw",
+              "raw": "Впоследствии тенденция употребления окончания -a распространилась",
+              "number": null,
+              "indent": 1
+            },
+            {
+              "type": "text_raw",
+              "raw": "на другие жен. имена, однако единого мнения на этот счёт до сих",
+              "number": null,
+              "indent": 1
+            },
+            {
+              "type": "text_raw",
+              "raw": "пор нет; многие теоретики эсперанто рассматривают конечное",
+              "number": null,
+              "indent": 1
+            },
+            {
+              "type": "text_raw",
+              "raw": "-а в жен. именах вообще не как окончание, а как элемент корня,",
+              "number": null,
+              "indent": 1
+            },
+            {
+              "type": "text_raw",
+              "raw": "считая такие формы неэсперантизированными подобно названиям",
+              "number": null,
+              "indent": 1
+            },
+            {
+              "type": "text_raw",
+              "raw": "некоторых греческих букв (alfa, beta и др.)_;",
+              "number": null,
+              "indent": 1
+            },
+            {
+              "type": "text_raw",
+              "raw": "@ _употребляется и как самостоятельный корень_:",
+              "number": null,
+              "indent": 0
+            }
+          ]
+        },
+        {
+          "raw": "[a-vort/o]",
+          "expanded": "a-vorto",
+          "blocks": [
+            {
+              "type": "text_raw",
+              "raw": "(_только в эсперанто_) (`имя) прилаг`ательное (= adjektivo);",
+              "number": null,
+              "indent": 0
+            },
+            {
+              "type": "note",
+              "raw": "_по формальному признаку этот термин может обозначать",
+              "number": null,
+              "indent": 1
+            },
+            {
+              "type": "text_raw",
+              "raw": "более широкую группу, в которую помимо собственно",
+              "number": null,
+              "indent": 1
+            },
+            {
+              "type": "text_raw",
+              "raw": "прилагательных входят также притяжательные местоимения,",
+              "number": null,
+              "indent": 1
+            },
+            {
+              "type": "text_raw",
+              "raw": "порядковые числительные и причастия_.",
+              "number": null,
+              "indent": 1
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "art_id": 3,
+    "headword": "[-a II]",
+    "v4_ast": {
+      "forms": [
+        {
+          "raw": "[-a II]",
+          "expanded": "-a II",
+          "blocks": [
+            {
+              "type": "note",
+              "raw": "_элемент_ -a_, являющийся конечной частью корня в названиях",
+              "number": null,
+              "indent": 0
+            },
+            {
+              "type": "text_raw",
+              "raw": "ряда греч. букв_:",
+              "number": null,
+              "indent": 1
+            },
+            {
+              "type": "example_raw",
+              "raw": "beta б`ета;",
+              "number": null,
+              "indent": 2
+            },
+            {
+              "type": "example_raw",
+              "raw": "gama г`амма.",
+              "number": null,
+              "indent": 2
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "art_id": 6,
+    "headword": "[ab-]",
+    "v4_ast": {
+      "forms": [
+        {
+          "raw": "[ab-]",
+          "expanded": "ab-",
+          "blocks": [
+            {
+              "type": "note",
+              "raw": "_спец. приставка_ аб- _со значением <<абсолютный>>,",
+              "number": null,
+              "indent": 0
+            },
+            {
+              "type": "text_raw",
+              "raw": "присоединяемая к названиям физических величин",
+              "number": null,
+              "indent": 1
+            },
+            {
+              "type": "text_raw",
+              "raw": "в абсолютной системе единиц_:",
+              "number": null,
+              "indent": 1
+            },
+            {
+              "type": "example_raw",
+              "raw": "ab/ampero абамп`ер, абсол`ютный амп`ер;",
+              "number": null,
+              "indent": 2
+            },
+            {
+              "type": "example_raw",
+              "raw": "ab/omo аб`ом, абсол`ютный ом;",
+              "number": null,
+              "indent": 2
+            },
+            {
+              "type": "example_raw",
+              "raw": "ab/volto абв`ольт, абсол`ютный вольт.",
+              "number": null,
+              "indent": 2
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "art_id": 56,
+    "headword": "[ablaci/o]",
+    "v4_ast": {
+      "forms": [
+        {
+          "raw": "[ablaci/o]",
+          "expanded": "ablacio",
+          "blocks": [
+            {
+              "type": "sense",
+              "raw": "_мед._ иссеч`ение, удал`ение (_ткани, члена",
+              "number": 1,
+              "indent": 0
+            },
+            {
+              "type": "text_raw",
+              "raw": "или органа_ = <fortrancxo>, <desekco>);",
+              "number": null,
+              "indent": 2
+            },
+            {
+              "type": "note",
+              "raw": "_ср._ <ektomio>;",
+              "number": null,
+              "indent": 2
+            },
+            {
+              "type": "sense",
+              "raw": "_геол._ абл`яция, разруш`ение (_под действием",
+              "number": 2,
+              "indent": 1
+            },
+            {
+              "type": "text_raw",
+              "raw": "метеорологических факторов_);",
+              "number": null,
+              "indent": 2
+            },
+            {
+              "type": "sense",
+              "raw": "_астр._ абл`яция, сгор`ание (_в атмосфере, вследствие",
+              "number": 3,
+              "indent": 1
+            },
+            {
+              "type": "text_raw",
+              "raw": "радиации, в потоке горячего газа и т.п._).",
+              "number": null,
+              "indent": 2
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "art_id": 77,
+    "headword": "[abort|i]",
+    "v4_ast": {
+      "forms": [
+        {
+          "raw": "[abort|i]",
+          "expanded": "aborti",
+          "blocks": [
+            {
+              "type": "example_raw",
+              "raw": "{vn} 1. _мед._ в`ыкинуть плод, преждевр`еменно род`ить;",
+              "number": null,
+              "indent": 0
+            },
+            {
+              "type": "note",
+              "raw": "_ср._ <akusxi>;",
+              "number": null,
+              "indent": 2
+            },
+            {
+              "type": "sense",
+              "raw": "_перен._ останов`иться в разв`итии; ок`ончиться пров`алом,",
+              "number": 2,
+              "indent": 1
+            },
+            {
+              "type": "text_raw",
+              "raw": "потерп`еть неуд`ачу;",
+              "number": null,
+              "indent": 2
+            }
+          ]
+        },
+        {
+          "raw": "[~o]",
+          "expanded": "aborto",
+          "blocks": [
+            {
+              "type": "text_raw",
+              "raw": "преждевр`еменные р`оды; самопроизв`ольный, ест`ественный,",
+              "number": null,
+              "indent": 0
+            },
+            {
+              "type": "text_raw",
+              "raw": "спонт`анный аб`орт;",
+              "number": null,
+              "indent": 1
+            }
+          ]
+        },
+        {
+          "raw": "[~a]",
+          "expanded": "aborta",
+          "blocks": [
+            {
+              "type": "text_raw",
+              "raw": "аборт`ивный _т.е._ недон`ошенный, недор`азвитый, останов`ившийся",
+              "number": null,
+              "indent": 0
+            },
+            {
+              "type": "text_raw",
+              "raw": "в разв`итии;",
+              "number": null,
+              "indent": 2
+            },
+            {
+              "type": "example_raw",
+              "raw": "~a rimo _лит._ корнев`ая р`ифма (_в эсперанто называемая абортивной_);",
+              "number": null,
+              "indent": 1
+            }
+          ]
+        },
+        {
+          "raw": "[~ajx/o]",
+          "expanded": "abortajxo",
+          "blocks": [
+            {
+              "type": "text_raw",
+              "raw": "недон`осок, в`ыкидыш; _мед._ аб`ортус, нежизнеспос`обный плод;",
+              "number": null,
+              "indent": 0
+            }
+          ]
+        },
+        {
+          "raw": "[~ig/i]",
+          "expanded": "abortigi",
+          "blocks": [
+            {
+              "type": "sense",
+              "raw": "(_iun_) произвест`и, сд`елать аб`орт (_кому-л._);",
+              "number": 1,
+              "indent": 0
+            },
+            {
+              "type": "example_raw",
+              "raw": "~igi sin сд`елать (себе) аб`орт;",
+              "number": null,
+              "indent": 2
+            },
+            {
+              "type": "sense",
+              "raw": "(_ion_) _перен._ прес`ечь, предотврат`ить, приостанов`ить",
+              "number": 2,
+              "indent": 1
+            },
+            {
+              "type": "text_raw",
+              "raw": "(_что-л._);",
+              "number": null,
+              "indent": 2
+            }
+          ]
+        },
+        {
+          "raw": "[~ig/a]",
+          "expanded": "abortiga",
+          "blocks": [
+            {
+              "type": "text_raw",
+              "raw": "аборт`ивный _т.е._ (при)остан`авливающий разв`итие;",
+              "number": null,
+              "indent": 0
+            }
+          ]
+        },
+        {
+          "raw": "[~ig/o]",
+          "expanded": "abortigo",
+          "blocks": [
+            {
+              "type": "sense",
+              "raw": "иск`усственный аб`орт;",
+              "number": 1,
+              "indent": 0
+            },
+            {
+              "type": "sense",
+              "raw": "_перен._ пресеч`ение, предотвращ`ение, приостановл`ение;",
+              "number": 2,
+              "indent": 1
+            }
+          ]
+        },
+        {
+          "raw": "[~ig/il/o]",
+          "expanded": "abortigilo",
+          "blocks": [
+            {
+              "type": "text_raw",
+              "raw": "аборт`ивное ср`едство; _ист._ аборт`ивный кес`арий;",
+              "number": null,
+              "indent": 0
+            }
+          ]
+        },
+        {
+          "raw": "[~it/ajx/o]",
+          "expanded": "abortitajxo",
+          "blocks": [
+            {
+              "type": "note",
+              "raw": "_см._ ~ajxo;",
+              "number": null,
+              "indent": 0
+            }
+          ]
+        },
+        {
+          "raw": "[~ul/o]",
+          "expanded": "abortulo",
+          "blocks": [
+            {
+              "type": "sense",
+              "raw": "_см._ ~ajxo;",
+              "number": 1,
+              "indent": 0
+            },
+            {
+              "type": "sense",
+              "raw": "_груб._ в`ыродок, недон`осок.",
+              "number": 2,
+              "indent": 1
+            }
+          ]
+        }
+      ]
+    }
+  }
+]

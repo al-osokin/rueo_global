@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import re
 import copy
 from collections import defaultdict
@@ -9,16 +10,17 @@ from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
 from app.database import SessionLocal
 from app.models import Article, ArticleRu
+from app.services.review_v4_adapter import build_translation_review_from_v4_ast
 
 
-@dataclass(slots=True)
+@dataclass
 class TranslationCandidate:
     candidate_id: str
     title: str
     items: List[str]
 
 
-@dataclass(slots=True)
+@dataclass
 class TranslationGroup:
     """Represents a group of synonymous Russian translations for review."""
 
@@ -45,7 +47,7 @@ class TranslationGroup:
         return None
 
 
-@dataclass(slots=True)
+@dataclass
 class TranslationReview:
     headword: str
     groups: List[TranslationGroup]
@@ -95,10 +97,24 @@ def build_translation_review(parsed_article: Dict) -> TranslationReview:
 
     headword = (parsed_article.get("headword") or {}).get("raw_form") or "<без заголовка>"
     meta = parsed_article.get("meta") or {}
+
+    if _is_v4_review_enabled():
+        v4_ast = meta.get("v4_ast")
+        if isinstance(v4_ast, dict):
+            groups, notes = build_translation_review_from_v4_ast(
+                headword=headword,
+                v4_ast=v4_ast,
+                make_group=TranslationGroup,
+                build_candidates=_build_translation_candidates,
+                select_candidate=_select_candidate,
+                clean_spacing=_clean_spacing,
+                split_items_from_raw=_split_items_from_raw,
+                split_example_raw=_split_example_raw,
+            )
+            return TranslationReview(headword=headword, groups=groups, notes=notes)
+
     lang = meta.get("lang")
     art_id = meta.get("art_id")
-    
-
     article_sections = _get_article_sections(lang, art_id) if lang and art_id else None
     groups, notes = _collect_groups_from_blocks(
         parsed_article.get("body") or [],
@@ -106,6 +122,50 @@ def build_translation_review(parsed_article: Dict) -> TranslationReview:
         article_sections=article_sections,
     )
     return TranslationReview(headword=headword, groups=groups, notes=notes)
+
+
+def _is_v4_review_enabled() -> bool:
+    raw = os.getenv("REVIEW_USE_PARSER_V4", "0").strip().lower()
+    return raw in {"1", "true", "yes", "on"}
+
+
+
+def _split_items_from_raw(raw: str) -> List[str]:
+    text = _strip_reference_suffix(raw)
+    text = re.sub(r"^\d+\.\s*", "", text)
+    parts = _split_source_segments(text)
+    out: List[str] = []
+    for part in parts:
+        cleaned = _clean_spacing(part)
+        if not cleaned:
+            continue
+        if _is_pure_reference_segment(cleaned):
+            continue
+        for expanded in _expand_inline_synonyms_list([cleaned]):
+            norm = _strip_trailing_punctuation(_clean_spacing(expanded))
+            if _is_meaningful_item(norm):
+                out.append(norm)
+    return _deduplicate(out)
+
+
+def _split_example_raw(raw: str) -> Tuple[Optional[str], str]:
+    text = raw.strip()
+    if not text:
+        return None, ""
+
+    tokens = text.split()
+    split_at = None
+    for idx, token in enumerate(tokens):
+        if any('а' <= ch.lower() <= 'я' or ch.lower() == 'ё' for ch in token):
+            split_at = idx
+            break
+
+    if split_at is None or split_at == 0:
+        return None, text
+
+    eo_part = " ".join(tokens[:split_at]).strip()
+    ru_part = " ".join(tokens[split_at:]).strip()
+    return eo_part or None, ru_part
 
 
 def format_translation_review(review: TranslationReview) -> str:
@@ -307,6 +367,15 @@ def _collect_groups_from_blocks(
             items = _normalize_compound_terms(items)
             expanded = _expand_prepositional_variations(items, cleaned_base)
             items = expanded
+
+            # Антирегрессия: не схлопываем базовый список в одну строку
+            # (например: ["иссечение", "удаление"] -> "иссечение удаление").
+            if len(items) == 1 and len(cleaned_base) > 1:
+                joined_base = _clean_spacing(" ".join(cleaned_base))
+                if _clean_spacing(items[0]) == joined_base:
+                    items = list(cleaned_base)
+                    auto_generated = False
+
             if len(items) > len(cleaned_base):
                 cleaned_base = list(items)
             candidates = _build_translation_candidates(cleaned_base, items)
@@ -465,6 +534,43 @@ def _collect_groups_from_blocks(
                                 break
                     if not attached:
                         _append_note(note)
+
+            # В morpheme-шаблонах полезные примеры часто лежат в children explanation-блока
+            for child in block.get("children") or []:
+                child_type = child.get("type")
+                if child_type == "translation":
+                    child_content_raw = _clone_nodes(child.get("content") or [])
+                    child_content = _normalize_labelled_content(child_content_raw)
+                    child_plain = _clean_spacing("".join(
+                        node.get("text", "")
+                        for node in child_content
+                        if node.get("type") in {"text", "divider"}
+                    )) if child_content else ""
+                    child_plain = re.sub(r"\s+(?:ср|см)\.?$", "", child_plain, flags=re.IGNORECASE).strip()
+
+                    # continuation of parenthetical note: "... (ткани, члена" + "или органа [ср.]"
+                    if child_plain.lower().startswith("или ") and extra_notes:
+                        extra_notes[-1] = _clean_spacing(f"{extra_notes[-1]} {child_plain}")
+                        continue
+
+                    if child_content:
+                        # apply cleaned plain text back when content is effectively one phrase
+                        if child_plain and len(child_content) == 1 and child_content[0].get("type") == "text":
+                            child_content = [dict(child_content[0], text=child_plain)]
+                        buffer_content.append(child_content)
+                        if child.get("ru_requires_review"):
+                            buffer_requires_review = True
+                        buffer_continues = _block_indicates_continuation(child)
+                elif child_type == "illustration" and child.get("eo"):
+                    _flush_buffer()
+                    example_section = child.get("eo_raw") or child.get("eo")
+                    example_groups, example_notes = _build_groups_from_example(
+                        child,
+                        example_section,
+                        article_sections,
+                    )
+                    groups.extend(example_groups)
+                    notes.extend(example_notes)
             continue
 
         if block_type == "translation" or (block_type == "illustration" and not block.get("eo")):
@@ -490,6 +596,7 @@ def _collect_groups_from_blocks(
                         buffer_continues = _block_indicates_continuation(block)
                 
                 # Затем обрабатываем детей пронумерованного значения
+                prev_child_type = None
                 for child in block.get("children") or []:
                     child_type = child.get("type")
                     if child_type == "translation":
@@ -497,7 +604,21 @@ def _collect_groups_from_blocks(
                             _flush_buffer()
                         child_content_raw = _clone_nodes(child.get("content") or [])
                         child_content = _normalize_labelled_content(child_content_raw)
+                        child_plain = _clean_spacing("".join(
+                            node.get("text", "")
+                            for node in child_content
+                            if node.get("type") in {"text", "divider"}
+                        )) if child_content else ""
+                        child_plain = re.sub(r"\s+(?:ср|см)\.?$", "", child_plain, flags=re.IGNORECASE).strip()
+
+                        # continuation of explanatory parenthesis from previous child explanation
+                        if prev_child_type == "explanation" and child_plain.lower().startswith("или "):
+                            prev_child_type = child_type
+                            continue
+
                         if child_content:
+                            if child_plain and len(child_content) == 1 and child_content[0].get("type") == "text":
+                                child_content = [dict(child_content[0], text=child_plain)]
                             buffer_content.append(child_content)
                             if child.get("ru_requires_review"):
                                 buffer_requires_review = True
@@ -534,6 +655,8 @@ def _collect_groups_from_blocks(
                                 if child.get("ru_requires_review"):
                                     buffer_requires_review = True
                                 buffer_continues = _block_indicates_continuation(child)
+
+                    prev_child_type = child_type
                 
                 # После обработки всех детей, flush buffer
                 _flush_buffer()
@@ -1571,7 +1694,14 @@ def _merge_adjacent_text_nodes(nodes: List[Dict[str, Any]]) -> List[Dict[str, An
             and not merged[-1].get("kind")
         ):
             prev_text = merged[-1].get("text", "")
-            merged[-1]["text"] = prev_text + (node.get("text") or "")
+            next_text = node.get("text") or ""
+            if prev_text and next_text:
+                if not prev_text.endswith((" ", "(", "[", "{", "-", "—", "/")) and not next_text.startswith((" ", ",", ";", ":", ".", "!", "?", ")", "]", "}")):
+                    merged[-1]["text"] = prev_text + " " + next_text
+                else:
+                    merged[-1]["text"] = prev_text + next_text
+            else:
+                merged[-1]["text"] = prev_text + next_text
             continue
         merged.append(node)
     return merged
@@ -1763,6 +1893,12 @@ def _expand_adjective_list(items: List[str]) -> List[str]:
     # Если нашли хотя бы одно прилагательное перед последним элементом
     if not adjectives:
         return items
+
+    # Защита от ложного срабатывания: когда "noun" совпадает с одним из
+    # предыдущих "прилагательных" (напр. "прилагательное" + "`имя прилагательное").
+    noun_norm = _strip_accents(noun).lower()
+    if any(_strip_accents(adj).lower() == noun_norm for adj in adjectives):
+        return items
     
     # Если последний элемент - "adj noun", включаем его в результат
     result: List[str] = []
@@ -1798,6 +1934,7 @@ def _normalize_compound_terms(items: List[str]) -> List[str]:
                 continue
         stripped = _REFERENCE_TRAIL_RE.sub("", stripped).rstrip()
         stripped = re.sub(r"\s+сущ\.?$", "", stripped)
+        stripped = re.sub(r"\s+(?:ср|см)\.?$", "", stripped, flags=re.IGNORECASE)
         result.append(stripped)
     return _deduplicate(result)
 
@@ -2097,6 +2234,13 @@ def _extract_translation_from_explanation(content: Iterable[Dict]) -> Tuple[List
             if style == "italic":
                 cleaned_note = _clean_spacing(raw_text.replace("_", " "))
                 cleaned_note = cleaned_note.strip("()")
+
+                # Иногда разделитель (например ';') приезжает как italic-сегмент
+                # из-за перетекания курсивного блока между строками.
+                if cleaned_note in {';', ',', ':'}:
+                    translation_nodes.append({'type': 'divider', 'text': cleaned_note})
+                    continue
+
                 if cleaned_note and translation_nodes:
                     last_node = translation_nodes[-1]
                     if (
