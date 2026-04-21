@@ -114,6 +114,14 @@ def _is_separator_token(text: str) -> bool:
     return False
 
 
+def _is_reference_note(text: str) -> bool:
+    """Ссылочные заметки вида '_см._ <...>' / '_ср._ <...>' считаем note, а не sense."""
+    stripped = text.strip()
+    if not stripped.startswith("_"):
+        return False
+    return bool(re.match(r"^_(?:см|ср)\._", stripped, flags=re.IGNORECASE))
+
+
 @dataclass
 class StructuralBlock:
     type: str
@@ -261,14 +269,25 @@ class ParsingPipelineV4:
     def _append_block(self, form: StructuralForm, text: str, indent: int) -> None:
         m = re.match(r"^(?:\{[^}]+\}\s*)?(\d+)\.\s*(.*)$", text)
         if m:
-            form.blocks.append(
-                StructuralBlock(
-                    type="sense",
-                    raw=m.group(2).strip(),
-                    number=int(m.group(1)),
-                    indent=indent,
+            sense_raw = m.group(2).strip()
+            if _is_reference_note(sense_raw):
+                form.blocks.append(
+                    StructuralBlock(
+                        type="note",
+                        raw=sense_raw,
+                        number=int(m.group(1)),
+                        indent=indent,
+                    )
                 )
-            )
+            else:
+                form.blocks.append(
+                    StructuralBlock(
+                        type="sense",
+                        raw=sense_raw,
+                        number=int(m.group(1)),
+                        indent=indent,
+                    )
+                )
             return
 
         # Minimal deterministic classification; semantics later

@@ -677,12 +677,13 @@
           "expanded": "abortulo",
           "blocks": [
             {
-              "type": "sense",
+              "type": "note",
               "raw": "_см._ ~ajxo;",
               "number": 1,
               "indent": 0,
-              "scope": "sense",
-              "sense_number": 1
+              "scope": "form",
+              "sense_number": null,
+              "note_scope": "form"
             },
             {
               "type": "sense",

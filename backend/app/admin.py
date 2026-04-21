@@ -94,6 +94,55 @@ class ReparseResponse(BaseModel):
 class ArticleReparseResponse(BaseModel):
     article: ArticleReviewPayload
     parse_error: Optional[str] = None
+    review_diagnostic: Optional[Dict[str, str]] = None
+
+
+class ArticleAstPayload(BaseModel):
+    headword: Optional[str] = None
+    lang: str
+    art_id: int
+    parse_error: Optional[str] = None
+    review_diagnostic: Optional[Dict[str, str]] = None
+    v4_ast: Optional[Dict[str, Any]] = None
+
+
+class ResolveBlockRequest(BaseModel):
+    article_id: int = Field(..., ge=1)
+    lang: str = Field(..., min_length=2, max_length=4)
+    form_id: str = Field(..., min_length=1)
+    block_id: str = Field(..., min_length=1)
+    context: Dict[str, Any] = Field(default_factory=dict)
+
+
+class ResolveBlockResponse(BaseModel):
+    provider: str
+    candidates: List[str]
+    confidence: float = Field(..., ge=0.0, le=1.0)
+    rationale_short: str
+
+
+class OperatorActionPayload(BaseModel):
+    action: str = Field(..., pattern="^(accept|edit|reject)$")
+    selected_candidate_id: Optional[str] = None
+    value: Optional[str] = None
+    comment: Optional[str] = None
+
+
+class ApplyResolutionRequest(BaseModel):
+    article_id: int = Field(..., ge=1)
+    lang: str = Field(..., min_length=2, max_length=4)
+    form_id: str = Field(..., min_length=1)
+    block_id: str = Field(..., min_length=1)
+    operator_action: OperatorActionPayload
+
+
+class ApplyResolutionResponse(BaseModel):
+    status: str
+    article_id: int
+    lang: str
+    form_id: str
+    block_id: str
+    operator_action: Dict[str, Any]
 
 _state_lock = threading.Lock()
 _state = {
@@ -295,6 +344,40 @@ def reset_article_review(
     return service.reset_article(lang, art_id)
 
 
+@router.get("/v4/articles/{lang}/{art_id}/ast", response_model=ArticleAstPayload)
+def get_article_ast(lang: str, art_id: int, session=Depends(get_session)):
+    _ensure_lang(lang)
+    service = ArticleReviewService(session)
+    return service.load_article_ast(lang, art_id)
+
+
+@router.post("/v4/resolve-block", response_model=ResolveBlockResponse)
+def resolve_block(payload: ResolveBlockRequest, session=Depends(get_session)):
+    _ensure_lang(payload.lang)
+    service = ArticleReviewService(session)
+    return ResolveBlockResponse(**service.resolve_block_draft(
+        payload.lang,
+        payload.article_id,
+        payload.form_id,
+        payload.block_id,
+        payload.context,
+    ))
+
+
+@router.post("/v4/apply-resolution", response_model=ApplyResolutionResponse)
+def apply_resolution(payload: ApplyResolutionRequest, session=Depends(get_session)):
+    _ensure_lang(payload.lang)
+    service = ArticleReviewService(session)
+    result = service.apply_resolution_action(
+        payload.lang,
+        payload.article_id,
+        payload.form_id,
+        payload.block_id,
+        payload.operator_action.model_dump(exclude_none=True),
+    )
+    return ApplyResolutionResponse(**result)
+
+
 @router.post("/articles/{lang}/{art_id}/reparse", response_model=ArticleReparseResponse)
 def reparse_single_article(
     lang: str,
@@ -308,5 +391,6 @@ def reparse_single_article(
     response = ArticleReparseResponse(
         article=ArticleReviewPayload(**payload),
         parse_error=result.error if not result.success else None,
+        review_diagnostic=result.review_diagnostic,
     )
     return response

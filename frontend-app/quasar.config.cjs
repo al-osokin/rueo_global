@@ -110,6 +110,14 @@ module.exports = configure(function (ctx) {
           target: apiTarget,
           changeOrigin: true,
         },
+        "/admin/v4": {
+          target: apiTarget,
+          changeOrigin: true,
+        },
+        "/admin/v4/": {
+          target: apiTarget,
+          changeOrigin: true,
+        },
       },
     },
 

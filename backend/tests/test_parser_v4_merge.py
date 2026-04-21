@@ -83,3 +83,19 @@ def test_id77_like_numbered_note_and_examples_keep_sense_mapping():
     assert blocks[3]["type"] == "example_raw"
     assert blocks[3]["sense_number"] == 2
     assert blocks[3]["scope"] == "sense"
+
+
+def test_id77_abortulo_first_numbered_reference_is_note_not_sense():
+    text = """[~ul/o]
+1. _см._ ~ajxo;
+2. _груб._ в`ыродок, недон`осок.
+"""
+    blocks = _first_form_blocks(text)
+
+    assert blocks[0]["type"] == "note"
+    assert blocks[0]["number"] == 1
+    assert blocks[0]["raw"].startswith("_см._")
+
+    assert blocks[1]["type"] == "sense"
+    assert blocks[1]["number"] == 2
+    assert blocks[1]["sense_number"] == 2

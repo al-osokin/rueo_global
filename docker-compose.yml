@@ -28,7 +28,7 @@ services:
     depends_on:
       - db
     environment:
-      - DATABASE_URL=postgresql://rueo_user:rueo_password@db:5432/rueo_db
+      - DATABASE_URL=postgresql://rueo_user:rueo_password@db:5432/rueo_stage2
 
 volumes:
   postgres_data:

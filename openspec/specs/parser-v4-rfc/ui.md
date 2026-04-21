@@ -56,13 +56,85 @@ When `review_diagnostic` is present:
 - Trigger modes:
   - per-group inline button
   - right-side panel with current group context
-- Payload to assistant:
-  - `headword`, `section`, `label`, `items`, `base_items`, `eo_source`, `review_notes`
-- Response format:
-  - `suggestions: string[]`
-  - `rationale?: string`
 - Safety:
   - never overwrite accepted/manual values automatically
+
+### Backend API (implemented)
+
+#### `POST /admin/v4/resolve-block`
+Draft generator (stub-провайдер, без реального LLM вызова).
+
+Request:
+```json
+{
+  "article_id": 77,
+  "lang": "eo",
+  "form_id": "form_0",
+  "block_id": "block_1",
+  "context": {
+    "label": "пример beta",
+    "items": ["бета"],
+    "base_items": ["бета"],
+    "eo_source": "beta",
+    "review_notes": []
+  }
+}
+```
+
+Response:
+```json
+{
+  "provider": "gemma-assist-stub",
+  "candidates": ["бета", "бета (уточнить)"],
+  "confidence": 0.42,
+  "rationale_short": "Stub provider: черновые варианты сформированы локально без вызова модели."
+}
+```
+
+Validation:
+- `article_id >= 1`
+- `lang` обязателен (`eo|ru`)
+- `form_id`, `block_id` — непустые строки
+
+#### `POST /admin/v4/apply-resolution`
+Сохраняет операторское решение в `article_parse_state.resolved_translations.groups[*].operator_action`.
+
+Request:
+```json
+{
+  "article_id": 77,
+  "lang": "eo",
+  "form_id": "form_0",
+  "block_id": "block_1",
+  "operator_action": {
+    "action": "edit",
+    "selected_candidate_id": "c2",
+    "value": "бета",
+    "comment": "уточнил форму"
+  }
+}
+```
+
+Response:
+```json
+{
+  "status": "ok",
+  "article_id": 77,
+  "lang": "eo",
+  "form_id": "form_0",
+  "block_id": "block_1",
+  "operator_action": {
+    "action": "edit",
+    "selected_candidate_id": "c2",
+    "value": "бета",
+    "comment": "уточнил форму"
+  }
+}
+```
+
+Validation:
+- `operator_action.action` ∈ `accept|edit|reject`
+- все идентификаторы и `lang` обязательны
 
 ## Acceptance criteria (draft)
 1. If `v4_ast` missing or invalid, user sees blocking diagnostic within 1 render cycle.

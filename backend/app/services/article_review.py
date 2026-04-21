@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 from datetime import datetime
+import json
+import os
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
+import httpx
 from sqlalchemy import select, text, func
 from sqlalchemy.orm import Session
 
@@ -247,6 +250,231 @@ class ArticleReviewService:
             "resolved_translations": resolved,
             "notes": notes,
             "review_notes": review_notes,
+        }
+
+    def load_article_ast(self, lang: str, art_id: int) -> Dict[str, Any]:
+        result = self.parser.parse_article_by_id(lang, art_id, include_raw=True)
+        raw = result.raw if isinstance(result.raw, dict) else {}
+        meta = raw.get("meta") if isinstance(raw, dict) else {}
+        v4_ast = meta.get("v4_ast") if isinstance(meta, dict) else None
+        if not isinstance(v4_ast, dict):
+            v4_ast = None
+
+        return {
+            "headword": result.headword,
+            "lang": lang,
+            "art_id": art_id,
+            "parse_error": result.error,
+            "review_diagnostic": result.review_diagnostic,
+            "v4_ast": v4_ast,
+        }
+
+    def resolve_block_draft(
+        self,
+        lang: str,
+        art_id: int,
+        form_id: str,
+        block_id: str,
+        context: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        self._ensure_state(lang, art_id)
+        safe_context = context or {}
+
+        lmstudio_base_url = os.getenv("LMSTUDIO_BASE_URL", "").strip().rstrip("/")
+        lmstudio_model = os.getenv("LMSTUDIO_MODEL", "").strip() or os.getenv("GEMMA_MODEL", "").strip() or "gemma-4"
+        timeout_seconds = float(os.getenv("LMSTUDIO_TIMEOUT_SECONDS", "45"))
+
+        lmstudio_error: Optional[str] = None
+        if lmstudio_base_url:
+            try:
+                return self._resolve_block_with_lmstudio(
+                    base_url=lmstudio_base_url,
+                    model=lmstudio_model,
+                    timeout_seconds=timeout_seconds,
+                    lang=lang,
+                    art_id=art_id,
+                    form_id=form_id,
+                    block_id=block_id,
+                    context=safe_context,
+                )
+            except Exception as exc:
+                # Fallback ниже сохраняет обратную совместимость экрана review-v4,
+                # но отдаём причину для дебага в UI.
+                lmstudio_error = f"{type(exc).__name__}: {exc}"
+
+        items = safe_context.get("items") if isinstance(safe_context, dict) else None
+        candidates: List[str] = []
+        if isinstance(items, list):
+            candidates = [str(item).strip() for item in items if str(item).strip()]
+
+        if not candidates:
+            label = safe_context.get("label") if isinstance(safe_context, dict) else None
+            base = str(label).strip() if label else block_id
+            candidates = [f"{base}", f"{base} (уточнить)"]
+
+        candidates = list(dict.fromkeys(candidates))[:5]
+
+        rationale = "Stub provider: черновые варианты сформированы локально без вызова модели."
+        provider = "gemma-assist-stub"
+        if lmstudio_error:
+            provider = "lmstudio-fallback"
+            rationale = f"LM Studio fallback: {lmstudio_error}"
+
+        return {
+            "provider": provider,
+            "candidates": candidates,
+            "confidence": 0.42,
+            "rationale_short": rationale,
+        }
+
+    def _resolve_block_with_lmstudio(
+        self,
+        *,
+        base_url: str,
+        model: str,
+        timeout_seconds: float,
+        lang: str,
+        art_id: int,
+        form_id: str,
+        block_id: str,
+        context: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        source_items = context.get("items") if isinstance(context, dict) else None
+        source_text = " | ".join(str(x) for x in source_items if str(x).strip()) if isinstance(source_items, list) else ""
+        label = str(context.get("label", "")).strip() if isinstance(context, dict) else ""
+
+        prompt = (
+            "Ты помогаешь разбирать словарные переводы RU/EO. "
+            "Верни только JSON-объект без markdown: "
+            "{\"candidates\":[строки],\"confidence\":число0..1,\"rationale_short\":строка}. "
+            "Нужно предложить 1-5 вариантов разбиения/раскрытия блока на отдельные переводные элементы. "
+            "Сохраняй исходный язык и смысл, не добавляй новые термины без основания."
+        )
+
+        user_payload = {
+            "lang": lang,
+            "article_id": art_id,
+            "form_id": form_id,
+            "block_id": block_id,
+            "block_label": label,
+            "block_items": source_items if isinstance(source_items, list) else [],
+            "source_text": source_text,
+        }
+
+        request_payload = {
+            "model": model,
+            "temperature": 0.1,
+            "max_tokens": 500,
+            "messages": [
+                {"role": "system", "content": prompt},
+                {"role": "user", "content": json.dumps(user_payload, ensure_ascii=False)},
+            ],
+        }
+
+        with httpx.Client(timeout=timeout_seconds) as client:
+            response = client.post(f"{base_url}/chat/completions", json=request_payload)
+            response.raise_for_status()
+            data = response.json()
+
+        message = data.get("choices", [{}])[0].get("message", {})
+        content = message.get("content", "")
+        reasoning = message.get("reasoning_content", "")
+
+        payload_text = content.strip() if isinstance(content, str) else ""
+        if not payload_text and isinstance(reasoning, str) and reasoning.strip():
+            # Некоторые локальные модели кладут финальный JSON в reasoning_content
+            # или оставляют там единственный JSON-блок.
+            reasoning_text = reasoning.strip()
+            start = reasoning_text.find("{")
+            end = reasoning_text.rfind("}")
+            if start != -1 and end != -1 and end > start:
+                payload_text = reasoning_text[start:end + 1].strip()
+
+        if not payload_text:
+            raise ValueError("Empty LM Studio response")
+        if "```" in payload_text:
+            payload_text = payload_text.replace("```json", "").replace("```", "").strip()
+
+        parsed = json.loads(payload_text)
+        raw_candidates = parsed.get("candidates", []) if isinstance(parsed, dict) else []
+        candidates = [str(item).strip() for item in raw_candidates if str(item).strip()][:5]
+        if not candidates:
+            raise ValueError("LM Studio returned no candidates")
+
+        confidence_raw = parsed.get("confidence", 0.0) if isinstance(parsed, dict) else 0.0
+        try:
+            confidence = max(0.0, min(1.0, float(confidence_raw)))
+        except Exception:
+            confidence = 0.0
+
+        rationale_short = parsed.get("rationale_short", "") if isinstance(parsed, dict) else ""
+
+        return {
+            "provider": f"lmstudio:{model}",
+            "candidates": candidates,
+            "confidence": confidence,
+            "rationale_short": str(rationale_short).strip() or "Ответ получен от LM Studio.",
+        }
+
+    def apply_resolution_action(
+        self,
+        lang: str,
+        art_id: int,
+        form_id: str,
+        block_id: str,
+        operator_action: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        state = self._ensure_state(lang, art_id)
+        resolved = state.resolved_translations if isinstance(state.resolved_translations, dict) else {}
+
+        groups = resolved.get("groups")
+        if isinstance(groups, dict):
+            group_items: List[Dict[str, Any]] = []
+            for group_id, payload in groups.items():
+                if isinstance(payload, dict):
+                    item = dict(payload)
+                    item.setdefault("group_id", group_id)
+                    group_items.append(item)
+            groups = group_items
+        if not isinstance(groups, list):
+            groups = []
+
+        updated = False
+        for idx, group in enumerate(groups):
+            if not isinstance(group, dict):
+                continue
+            if group.get("form_id") == form_id and group.get("block_id") == block_id:
+                groups[idx] = {
+                    **group,
+                    "form_id": form_id,
+                    "block_id": block_id,
+                    "operator_action": operator_action,
+                    "updated_at": datetime.utcnow().isoformat(),
+                }
+                updated = True
+                break
+
+        if not updated:
+            groups.append(
+                {
+                    "form_id": form_id,
+                    "block_id": block_id,
+                    "operator_action": operator_action,
+                    "updated_at": datetime.utcnow().isoformat(),
+                }
+            )
+
+        resolved["groups"] = groups
+        state.resolved_translations = resolved
+        self.session.commit()
+
+        return {
+            "status": "ok",
+            "article_id": art_id,
+            "lang": lang,
+            "form_id": form_id,
+            "block_id": block_id,
+            "operator_action": operator_action,
         }
 
     def save_review(

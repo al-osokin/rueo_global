@@ -17,7 +17,7 @@ const routes = [
       { path: 'social', name:'social', component: () => import('pages/social.vue') },
       { path: 'novajxoj', name:'news', component: () => import('pages/novajxoj.vue') },
       { path: 'admin/review', name:'adminReview', component: () => import('pages/AdminReview.vue') },
-
+      { path: 'admin/review-v4', name:'adminV4Review', component: () => import('pages/AdminV4Review.vue') },
 
     ]
   },
