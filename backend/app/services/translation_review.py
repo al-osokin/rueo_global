@@ -2466,6 +2466,11 @@ def _expand_parenthetical_forms(phrase: str) -> List[str]:
                 return variants
 
         if " " not in inside_clean and "," not in inside_clean:
+            # Важное различие:
+            # - без пробела перед "(" => внутрисловная вариативность: (с)делать, орангутан(г)
+            # - с пробелом перед "(" => опциональный отдельный сегмент: "анализ (крови)"
+            in_word_optional = start == 0 or not text[start - 1].isspace()
+
             before_trimmed = before.rstrip()
             after_trimmed = after.lstrip()
 
@@ -2481,17 +2486,28 @@ def _expand_parenthetical_forms(phrase: str) -> List[str]:
             else:
                 without = before_trimmed + after_trimmed
 
-            after_without_space = after
-            had_leading_space = False
-            if after and after[0].isspace():
-                after_without_space = after.lstrip()
-                had_leading_space = True
-            insert_space = (
-                had_leading_space
-                and bool(after_without_space)
-                and not after_without_space.startswith((",", ";", ":", ".", ")", "—", "-", "‑"))
-            )
-            with_opt = before + inside_clean + (" " if insert_space else "") + after_without_space
+            if in_word_optional:
+                after_without_space = after
+                had_leading_space = False
+                if after and after[0].isspace():
+                    after_without_space = after.lstrip()
+                    had_leading_space = True
+                insert_space = (
+                    had_leading_space
+                    and bool(after_without_space)
+                    and not after_without_space.startswith((",", ";", ":", ".", ")", "—", "-", "‑"))
+                )
+                with_opt = before + inside_clean + (" " if insert_space else "") + after_without_space
+            else:
+                # Token-level optional: сохраняем вариант с сегментом БЕЗ скобок.
+                # "анализ (крови)" -> "анализ" | "анализ крови"
+                before_token = before.rstrip()
+                joiner = " " if before_token and not before_token.endswith((" ", "-", "—", "‑", "/")) else ""
+                tail = after.lstrip()
+                if tail and not tail.startswith((",", ";", ":", ".", ")", "—", "-", "‑")):
+                    with_opt = f"{before_token}{joiner}{inside_clean} {tail}".strip()
+                else:
+                    with_opt = f"{before_token}{joiner}{inside_clean}{tail}".strip()
             return _recurse(without, depth + 1) + _recurse(with_opt, depth + 1)
 
         preserved_before = before

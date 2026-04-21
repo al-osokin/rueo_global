@@ -95,9 +95,20 @@ def _looks_like_eo_ru_example(text: str) -> bool:
     if eo_clean.startswith("{"):
         return False
 
+    # Если RU-часть начинается с курсивной поясняющей скобки,
+    # это часто continuation перевода, а не EO->RU пример.
+    ru_clean = ru_part.strip()
+    if ru_clean.startswith("(_"):
+        return False
+
+    # Удаляем поясняющие скобки перед проверкой кириллицы,
+    # чтобы не ловить ложные examples на конструкциях вида
+    # "...; (_и это ... )".
+    ru_no_parens = re.sub(r"\([^)]*\)", "", ru_part)
+
     # heuristic: eo token usually latin-ish, ru side usually cyrillic-rich
     has_latin = any(('a' <= ch.lower() <= 'z') or ch in 'ĉĝĥĵŝŭ' for ch in eo_part)
-    has_cyr = any('а' <= ch.lower() <= 'я' or ch.lower() == 'ё' for ch in ru_part)
+    has_cyr = any('а' <= ch.lower() <= 'я' or ch.lower() == 'ё' for ch in ru_no_parens)
     return has_latin and has_cyr
 
 
@@ -120,6 +131,19 @@ def _is_reference_note(text: str) -> bool:
     if not stripped.startswith("_"):
         return False
     return bool(re.match(r"^_(?:см|ср)\._", stripped, flags=re.IGNORECASE))
+
+
+def _has_terminal_translation_punctuation(text: str) -> bool:
+    """True, если строка явно выглядит завершённой (`,`, `;`, `.` в конце)."""
+    stripped = text.rstrip()
+    if not stripped:
+        return False
+
+    # Разрешаем закрывающие скобки/кавычки после финального знака.
+    tail = stripped.rstrip(')]}"»')
+    if not tail:
+        return False
+    return tail.endswith((",", ";", "."))
 
 
 @dataclass
@@ -335,16 +359,20 @@ class ParsingPipelineV4:
         if re.match(r"^(?:\{[^}]+\}\s*)?\d+\.\s*", text.strip()):
             return False
 
-        # Явный короткий маркер заметки (например "_ср._") оставляем отдельным блоком.
-        if text.strip().startswith("_ср._"):
+        # Начало примечания всегда отдельным блоком.
+        if block_type == "note":
             return False
 
-        # Склеиваем только продолжения с большим отступом, чтобы не ломать границы верхнего уровня.
-        if indent <= prev.indent:
+        mergeable_prev = prev.type in {"sense", "note", "text_raw"}
+        mergeable_curr = block_type in {"text_raw"}
+        if not (mergeable_prev and mergeable_curr):
             return False
 
-        # Склейка допустима только для структурно «продолжаемых» блоков.
-        return prev.type in {"sense", "note", "text_raw"} and block_type in {"note", "text_raw"}
+        # Для multiline переводов склеиваем по умолчанию,
+        # кроме жёстких границ выше (numbered/example/separator/note-start).
+        # Запятая и точка с запятой в конце строки не запрещают склейку:
+        # это часто продолжение перечисления на следующей строке.
+        return True
 
     def _expand_headword(self, raw_headword: str, main_expanded: str) -> str:
         inside = raw_headword.strip()[1:-1] if raw_headword.startswith("[") else raw_headword

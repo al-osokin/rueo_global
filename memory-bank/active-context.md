@@ -9,6 +9,18 @@ Updated: 2026-04-21 (Europe/Moscow)
 - Проверен текущий путь интеграции `/admin/v4/resolve-block`: сейчас это `gemma-assist-stub` (dry-run подтверждён, live Gemma ещё не подключена).
 
 
+
+## Update (Gemma Assist quality, follow-up after 4b9c37b)
+- В `backend/app/services/article_review.py` усилен LM Studio parser для `/admin/v4/resolve-block`:
+  - поддержка `message.content` как dict / JSON-строка / массив чанков;
+  - fallback на JSON-блок из `reasoning_content` (если в content валидного JSON нет);
+  - reasoning в candidates больше не протекает (берём только поле `candidates` из распарсенного JSON).
+- Добавлена пост-обработка candidates: нормализация пробелов/пунктуации, удаление служебных/объяснительных хвостов, фильтрация мусора, dedup (case-insensitive), limit 5.
+- Добавлены тесты в `backend/tests/test_admin_v4_endpoints.py` на:
+  - воспроизведение дублей/англ. explanatory leakage и их фильтрацию;
+  - парсинг JSON-строки в content;
+  - парсинг content-массива + fallback на JSON из reasoning.
+
 ## Where we left off
 - Восстановлен контекст после аварии сессии/сброса контекста.
 - По словам из последнего рабочего отчёта (до поломки):
@@ -40,9 +52,45 @@ Updated: 2026-04-21 (Europe/Moscow)
   - сначала реальный запуск процесса/субагента,
   - потом статус с явным указанием, что именно запущено (и id, когда применимо).
 
+## Update (hard cases set for parser_v4 EO↔RU)
+- Подготовлен репрезентативный набор сложных кейсов для совместной ручной валидации:
+  - файл: `memory-bank/tasks/2026-04-21-parser-v4-hard-cases-eo-ru.md`.
+  - объём: 50 кейсов (25 переводов + 25 примеров).
+  - есть кластеризация по паттернам (`_или_`, списки `,`/`;`, тильда `~`, пометы `_перен._/_мед._/_т.е._/_см._/_ср._`, нумерованные блоки и т.д.).
+  - для каждого кейса: `article_id`, `headword`, RU/EO фрагменты, причина сложности, ожидаемая нормализация `eo|ru`, confidence.
+  - отдельно выделен shortlist из 10 быстрых показательных кейсов для прохода в `/admin/review-v4`.
+
+## Where we left off
+- Feasibility + quality groundwork по `parser_v4` и `resolve-block` сделан (см. выше).
+- Теперь добавлен датасет трудных кейсов для совместного разбора с пользователем и уточнения правил L0/Gemma/manual.
+
 ## Next step when resuming
-1. Подключить реальный Gemma provider вместо `gemma-assist-stub` в `ArticleReviewService.resolve_block_draft` (через отдельный adapter/endpoint с timeout+retry).
-2. Реализовать L0 pre-normalization + chunking policy из отчёта (`target<=450 chars`, `context<=1200`, `<=7 blocks`).
-3. Ввести JSON-schema validator ответа модели и единый расчёт confidence/flags.
-4. Прогнать второй срез (например, статьи 1000-1120) для проверки смещения паттернов относительно первых 120.
-5. Подготовить минимальный UI/Telegram контур operator-feedback (accept/edit/reject -> сохранение для weekly hard-negatives).
+1. Пройти shortlist (10 кейсов) в `/admin/review-v4` вместе с пользователем и зафиксировать фактические Accept/Edit/Reject.
+2. На основе расхождений обновить механические правила (L0): `_или_`-ветвление, split по `;`/`,`, поведение `~`, фильтрация reference-note.
+3. Для остатка из 50 кейсов пометить, какие блоки лучше отдавать в Gemma (ambiguous), какие — решать детерминированно.
+4. После ручной валидации подготовить mini-regression набор для parser_v4 (fixtures + expected normalized pairs).
+
+
+## Update (road validation session, 2026-04-21)
+- Проведена оперативная ручная валидация в чате (в дороге) по сложным EO↔RU кейсам из набора `2026-04-21-parser-v4-hard-cases-eo-ru.md`.
+- Подтверждены/уточнены правила:
+  - `;` — надёжный разделитель значений;
+  - `(_или_)` в EO/RU раскрывать в варианты;
+  - прямые скобки в RU/EO раскрывать в отдельные варианты (напр. `не ахти как (хорошо)` → два варианта);
+  - курсивные скобки — чаще note/preamble, не отдельный перевод;
+  - `_см._/_ср._` — reference-note, не перевод;
+  - при раскрытии скобок в одной стороне соответствие часто many-to-many, не index-alignment;
+  - если фрагмент обрезан/грязный (`fragment-truncated`) — не автонормализовать, отложить до полного контекста.
+- Зафиксированы эталоны для ключевых случаев:
+  - `aborto`: `преждевременные роды | самопроизвольный аборт | естественный аборт | спонтанный аборт`;
+  - `aborta`: `абортивный | недоношенный | недоразвитый | остановившийся в развитии`;
+  - `abortajxo`: `недоносок | выкидыш | абортус | нежизнеспособный плод`;
+  - `advokati`: `выступать в роли адвоката | выступать в роли защитника | адвокатствовать | работать адвокатом`;
+  - EO list alignment: `akuta/orta/malakuta/strecxita angulo` ↔ `острый/прямой/тупой/развёрнутый угол`.
+- Отложены как `unresolved`/`incomplete` кейсы с потерей хвоста/контекста (в т.ч. case 17 и case 41) для проверки у компьютера.
+
+## Next step when resuming
+1. Перенести подтверждённые эталоны в fixture/mini-regression набор parser_v4.
+2. Добавить в post-processing правила для прямых скобок и EO `_или_`-ветвлений (без перераздувания шаблонов).
+3. Реализовать режим many-to-many соответствия для случаев с односторонним раскрытием скобок.
+4. Довести `fragment-truncated/incomplete` кейсы по полным строкам из корпуса и закрыть unresolved список.

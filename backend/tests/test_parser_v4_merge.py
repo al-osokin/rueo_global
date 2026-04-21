@@ -99,3 +99,46 @@ def test_id77_abortulo_first_numbered_reference_is_note_not_sense():
     assert blocks[1]["type"] == "sense"
     assert blocks[1]["number"] == 2
     assert blocks[1]["sense_number"] == 2
+
+
+def test_line_without_terminal_punctuation_is_merged_even_same_indent():
+    text = """[а I]
+да поможет вам Бог
+помоги вам Бог;
+"""
+    blocks = _first_form_blocks(text)
+    assert len(blocks) == 1
+    assert blocks[0]["type"] == "text_raw"
+    assert blocks[0]["raw"] == "да поможет вам Бог помоги вам Бог;"
+
+
+def test_lines_with_terminal_punctuation_can_still_merge_for_continuation_lists():
+    text = """[без]
+~ всякой причины sen ia ajn kauxzo,
+senkauxze;
+"""
+    blocks = _first_form_blocks(text)
+    assert len(blocks) == 1
+    assert "~ всякой причины sen ia ajn kauxzo, senkauxze;" == blocks[0]["raw"]
+
+
+def test_note_start_is_hard_boundary_not_merged():
+    text = """[ablaci/o]
+иссечение, удаление
+_ср._ <ektomio>;
+"""
+    blocks = _first_form_blocks(text)
+    assert len(blocks) == 2
+    assert blocks[0]["type"] == "text_raw"
+    assert blocks[1]["type"] == "note"
+
+
+def test_eo_line_with_italic_ru_parenthetical_is_not_classified_as_example():
+    text = """[без]
+ankaux tio havas lokon en la afero; (_и это имеет место_)
+ankaux tio ne estas neadebla;
+"""
+    blocks = _first_form_blocks(text)
+    assert len(blocks) == 1
+    assert blocks[0]["type"] == "text_raw"
+    assert "ankaux tio ne estas neadebla;" in blocks[0]["raw"]
