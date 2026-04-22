@@ -1,0 +1,110 @@
+[
+  {
+    "id": "bez_line_merge",
+    "article_text": "[без]\n~ всякой причины sen ia ajn kauxzo,\nsenkauxze;\n",
+    "expected_blocks": [
+      {
+        "type": "text_raw",
+        "raw": "~ всякой причины sen ia ajn kauxzo, senkauxze;",
+        "scope": "form",
+        "sense_number": null
+      }
+    ]
+  },
+  {
+    "id": "bog_line_merge",
+    "article_text": "[бог]\nда поможет вам Бог\nпомоги вам Бог;\n",
+    "expected_blocks": [
+      {
+        "type": "text_raw",
+        "raw": "да поможет вам Бог помоги вам Бог;",
+        "scope": "form",
+        "sense_number": null
+      }
+    ]
+  },
+  {
+    "id": "a_i_line_merge",
+    "article_text": "[а I]\nда поможет вам Бог\nпомоги вам Бог;\n",
+    "expected_blocks": [
+      {
+        "type": "text_raw",
+        "raw": "да поможет вам Бог помоги вам Бог;",
+        "scope": "form",
+        "sense_number": null
+      }
+    ]
+  },
+  {
+    "id": "adres_parenthesized_prefix",
+    "article_text": "[адрес]\n(с)делать замечание в адрес кого-л.\n",
+    "expected_blocks": [
+      {
+        "type": "text_raw",
+        "raw": "(с)делать замечание в адрес кого-л.",
+        "scope": "form",
+        "sense_number": null
+      }
+    ]
+  },
+  {
+    "id": "orangutan_parenthesized_suffix",
+    "article_text": "[орангутан]\nорангутан(г)\n",
+    "expected_blocks": [
+      {
+        "type": "text_raw",
+        "raw": "орангутан(г)",
+        "scope": "form",
+        "sense_number": null
+      }
+    ]
+  },
+  {
+    "id": "analiz_parenthesized_object",
+    "article_text": "[анализ]\nсдать анализ (крови) на диабет\n",
+    "expected_blocks": [
+      {
+        "type": "text_raw",
+        "raw": "сдать анализ (крови) на диабет",
+        "scope": "form",
+        "sense_number": null
+      }
+    ]
+  },
+  {
+    "id": "ili_branch_kept_in_text",
+    "article_text": "[автомобиль]\nstiti (_или_ konduki) auxton\n",
+    "expected_blocks": [
+      {
+        "type": "text_raw",
+        "raw": "stiti (_или_ konduki) auxton",
+        "scope": "form",
+        "sense_number": null
+      }
+    ]
+  },
+  {
+    "id": "sm_sr_as_reference_notes",
+    "article_text": "[abortulo]\n1. _см._ ~ajxo;\n2. _ср._ <aborto>;\n3. _груб._ выродок.\n",
+    "expected_blocks": [
+      {
+        "type": "note",
+        "raw": "_см._ ~ajxo;",
+        "number": 1,
+        "note_scope": "form"
+      },
+      {
+        "type": "note",
+        "raw": "_ср._ <aborto>;",
+        "number": 2,
+        "note_scope": "form"
+      },
+      {
+        "type": "sense",
+        "raw": "_груб._ выродок.",
+        "number": 3,
+        "sense_number": 3
+      }
+    ]
+  }
+]
