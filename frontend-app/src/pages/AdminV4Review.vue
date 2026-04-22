@@ -40,6 +40,12 @@
             <div class="text-caption text-grey-8">block_id: {{ selectedBlock.blockId }}</div>
             <div class="text-body2 q-mt-xs">{{ selectedBlock.raw || '—' }}</div>
             <q-chip
+              v-if="selectedBlock?.reviewFlag"
+              size="sm"
+              :color="flagColor(selectedBlock.reviewFlag)"
+              text-color="white"
+            >{{ selectedBlock.reviewFlag }}</q-chip>
+            <q-chip
               v-if="selectedBlock?.applied"
               size="sm"
               color="positive"
@@ -233,6 +239,7 @@ const normalizedForms = computed(() => {
       senseNumber: block?.sense_number,
       exampleEo: block?.example_eo || '',
       exampleRu: block?.example_ru || '',
+      reviewFlag: classifyReviewFlag(block),
     }));
 
     const formLevelBlocks = mapped.filter((b) => b.scope === 'form' || b.senseNumber == null);
@@ -282,6 +289,15 @@ const BlockView = defineComponent({
       const chips = [
         h('span', { class: 'text-caption text-grey-7' }, `type: ${b.blockType}`),
       ];
+      if (b.reviewFlag) {
+        chips.push(
+          h(
+            'span',
+            { class: `text-caption q-ml-sm flag-chip flag-chip--${b.reviewFlag}` },
+            b.reviewFlag,
+          ),
+        );
+      }
       if (b.number != null) {
         chips.push(h('span', { class: 'text-caption text-grey-7 q-ml-sm' }, `#${b.number}`));
       }
@@ -302,6 +318,28 @@ const BlockView = defineComponent({
   },
 });
 
+function classifyReviewFlag(block) {
+  const raw = String(block?.raw || '').toLowerCase();
+
+  const hasMany = raw.includes('_или_') || raw.includes('(_или_') || raw.includes('(или');
+  if (hasMany) return 'many-to-many';
+
+  const hasLineMergeRisk =
+    (raw.includes(';') && raw.includes(',')) ||
+    ((raw.includes('(') && raw.includes(')')) && (raw.includes(';') || raw.includes(','))) ||
+    raw.split(';').length - 1 >= 2 ||
+    raw.split(',').length - 1 >= 3;
+
+  if (hasLineMergeRisk) return 'line-merge-risk';
+  return 'clean';
+}
+
+function flagColor(flag) {
+  if (flag === 'many-to-many') return 'deep-orange';
+  if (flag === 'line-merge-risk') return 'orange';
+  return 'positive';
+}
+
 function isSelected(formId, blockId) {
   return selectedBlock.value?.formId === formId && selectedBlock.value?.blockId === blockId;
 }
@@ -313,6 +351,7 @@ function selectBlock(formId, block) {
     blockId: block.blockId,
     raw: block.raw,
     blockType: block.blockType,
+    reviewFlag: block.reviewFlag,
     applied: Boolean(appliedBlocks.value[key]),
     context: {
       label: block.blockType,
@@ -441,5 +480,23 @@ async function applyResolution() {
 .ast-block--selected {
   border-color: var(--q-color-primary);
   background: rgba(25, 118, 210, 0.08);
+}
+
+.flag-chip {
+  border-radius: 10px;
+  padding: 1px 6px;
+  color: #fff;
+}
+
+.flag-chip--clean {
+  background: #2e7d32;
+}
+
+.flag-chip--line-merge-risk {
+  background: #ef6c00;
+}
+
+.flag-chip--many-to-many {
+  background: #d84315;
 }
 </style>

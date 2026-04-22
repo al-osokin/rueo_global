@@ -34,3 +34,5 @@
 - Отдельный прогон `test_parser_v4_snapshot_smoke.py` показывает 1 несовпадение снапшота (не в новом тесте); требует отдельного разбора и, вероятно, обновления golden-файла/ожиданий.
 
 - [x] Батч-метрики RU→EO (эвристический роутинг): первые 300 и 1200 статей, см. `memory-bank/tasks/2026-04-23-parser-v4-batch-metrics-ru-eo.md`.
+
+- [x] UI flags в `/admin/review-v4`: для блока отображается `clean` / `line-merge-risk` / `many-to-many` (эвристика как в batch metrics).
