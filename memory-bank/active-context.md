@@ -1,6 +1,37 @@
 # Active Context — rueo_global
 
-Updated: 2026-04-21 (Europe/Moscow)
+Updated: 2026-04-25 (Europe/Moscow)
+
+## Update (AdminV4 stability pass, 2026-04-25 night)
+- В `review-v4` отключён автопереразбор при открытии статьи: AST читается из сохранённого `parsed_payload`; добавлена явная кнопка `Переразобрать статью`.
+- Добавлены сбросы:
+  - `Сбросить подтверждения статьи` (article-level reset);
+  - `Сбросить этот блок` + backend endpoint `POST /admin/v4/reset-block`.
+- Улучшена UX карточки `Выбранный блок`:
+  - убран агрессивный автоскролл страницы;
+  - карточка позиционируется рядом с выбранным блоком (dynamic sticky top), без ухода в невидимую область.
+- Добавлен многослойный вывод блока (верхним слоем более поздний результат, исходник ниже).
+- Критичный фикс сохранения Apply после refresh:
+  - причина: изменения JSON-поля `resolved_translations` могли не фиксироваться ORM;
+  - решение: принудительная пометка изменения (`flag_modified`) при apply/reset block;
+  - подтверждено вручную и через API-проверку: после refresh подтверждения сохраняются.
+- Проверки после правок:
+  - `PYTHONPATH=. pytest tests/test_admin_v4_endpoints.py -q` → 16 passed;
+  - `npm run build` (frontend-app) → build succeeded.
+
+## Update (pause/handoff, 2026-04-25)
+- Зафиксирована пауза по проекту на конец недели (пользователь занят).
+- Контекст сохранён без новых кодовых изменений; задача — безопасно возобновиться с текущей точки без потерь.
+- Режим возврата: начать с shortlist 10 кейсов в `/admin/review-v4`, затем перенести решения в mini-regression.
+
+## Update (AdminV4 UX+hydrate, recovered from chat)
+- Добавлена автодоводка карточки `Выбранный блок`: при выборе блока выполняется `scrollIntoView` (sticky-only поведение признано неудобным при глубокой прокрутке).
+- Исправлено восстановление подтверждений после refresh:
+  - backend `GET /admin/v4/articles/{lang}/{art_id}/ast` теперь отдаёт `resolved_blocks`;
+  - frontend в `loadAst()` гидратит `blockFlags` (`applied/dirty`) из `resolved_blocks`.
+- Верификация после правок: `pytest backend/tests/test_admin_v4_endpoints.py` — 14 passed; `npm run build` — ok.
+- Нюанс данных: legacy-записи в `resolved_translations.groups` без `form_id/block_id` (`None`) не маппятся к конкретным блокам в UI.
+- Следующий шаг (опционально): миграционный эвристический костыль для article 77, чтобы попытаться сопоставить legacy-группы блокам и показать их в UI.
 
 ## Update (new)
 - Выполнено feasibility-исследование workflow `parser_v4 + Gemma` на первых 120 статьях словаря (`artikoloj_ru`, `ORDER BY art_id LIMIT 120`).

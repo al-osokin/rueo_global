@@ -3,17 +3,20 @@ from __future__ import annotations
 from datetime import datetime
 import json
 import os
+import re
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 import httpx
 from sqlalchemy import select, text, func
 from sqlalchemy.orm import Session
+from sqlalchemy.orm.attributes import flag_modified
 
 from app.models import Article, ArticleParseNote, ArticleParseState, ArticleRu
 from app.services.article_parser import ArticleParserService, ArticleParseResult
 from app.services.translation_review import (
     apply_candidate_selection,
     build_translation_review,
+    _split_items_from_raw,
 )
 
 
@@ -253,20 +256,98 @@ class ArticleReviewService:
         }
 
     def load_article_ast(self, lang: str, art_id: int) -> Dict[str, Any]:
-        result = self.parser.parse_article_by_id(lang, art_id, include_raw=True)
-        raw = result.raw if isinstance(result.raw, dict) else {}
+        state = self._ensure_state(lang, art_id)
+        raw = state.parsed_payload if isinstance(state.parsed_payload, dict) else {}
         meta = raw.get("meta") if isinstance(raw, dict) else {}
         v4_ast = meta.get("v4_ast") if isinstance(meta, dict) else None
         if not isinstance(v4_ast, dict):
             v4_ast = None
 
+        resolved = state.resolved_translations if isinstance(state.resolved_translations, dict) else {}
+        raw_groups = resolved.get("groups")
+
+        resolved_blocks: Dict[str, Any] = {}
+        if isinstance(raw_groups, list):
+            iterable = raw_groups
+        elif isinstance(raw_groups, dict):
+            iterable = list(raw_groups.values())
+        else:
+            iterable = []
+
+        for item in iterable:
+            if not isinstance(item, dict):
+                continue
+            form_id = item.get("form_id")
+            block_id = item.get("block_id")
+            if not form_id or not block_id:
+                continue
+            key = f"{form_id}:{block_id}"
+            resolved_blocks[key] = {
+                "applied": True,
+                "operator_action": item.get("operator_action"),
+                "updated_at": item.get("updated_at"),
+            }
+
         return {
-            "headword": result.headword,
+            "headword": state.headword,
             "lang": lang,
             "art_id": art_id,
-            "parse_error": result.error,
-            "review_diagnostic": result.review_diagnostic,
+            "parse_error": (
+                state.parsing_status
+                if state.parsing_status not in {"reviewed", "needs_review", "pending"}
+                else ("v4_ast_missing: run article reparse" if v4_ast is None else None)
+            ),
+            "review_diagnostic": None,
             "v4_ast": v4_ast,
+            "resolved_blocks": resolved_blocks,
+        }
+
+    def reset_block_resolution(
+        self,
+        lang: str,
+        art_id: int,
+        form_id: str,
+        block_id: str,
+    ) -> Dict[str, Any]:
+        state = self._ensure_state(lang, art_id)
+        resolved_raw = state.resolved_translations if isinstance(state.resolved_translations, dict) else {}
+        resolved = dict(resolved_raw)
+
+        groups = resolved.get("groups")
+        if isinstance(groups, dict):
+            group_items: List[Dict[str, Any]] = []
+            for group_key, payload in groups.items():
+                if isinstance(payload, dict):
+                    item = dict(payload)
+                    item.setdefault("group_id", group_key)
+                    group_items.append(item)
+            groups = group_items
+        if not isinstance(groups, list):
+            groups = []
+
+        kept: List[Dict[str, Any]] = []
+        removed = False
+        for group in groups:
+            if not isinstance(group, dict):
+                continue
+            if group.get("form_id") == form_id and group.get("block_id") == block_id:
+                removed = True
+                continue
+            kept.append(group)
+
+        resolved["groups"] = kept
+        state.resolved_translations = resolved
+        if hasattr(state, "_sa_instance_state"):
+            flag_modified(state, "resolved_translations")
+        self.session.commit()
+
+        return {
+            "status": "ok",
+            "article_id": art_id,
+            "lang": lang,
+            "form_id": form_id,
+            "block_id": block_id,
+            "removed": removed,
         }
 
     def resolve_block_draft(
@@ -303,9 +384,13 @@ class ArticleReviewService:
                 lmstudio_error = f"{type(exc).__name__}: {exc}"
 
         items = safe_context.get("items") if isinstance(safe_context, dict) else None
+        source_raw = safe_context.get("source_raw") if isinstance(safe_context, dict) else None
         candidates: List[str] = []
         if isinstance(items, list):
             candidates = [str(item).strip() for item in items if str(item).strip()]
+
+        if not candidates and isinstance(source_raw, str) and source_raw.strip():
+            candidates = _split_items_from_raw(source_raw)
 
         if not candidates:
             label = safe_context.get("label") if isinstance(safe_context, dict) else None
@@ -347,8 +432,10 @@ class ArticleReviewService:
             "Ты помогаешь разбирать словарные переводы RU/EO. "
             "Верни только JSON-объект без markdown: "
             "{\"candidates\":[строки],\"confidence\":число0..1,\"rationale_short\":строка}. "
-            "Нужно предложить 1-5 вариантов разбиения/раскрытия блока на отдельные переводные элементы. "
-            "Сохраняй исходный язык и смысл, не добавляй новые термины без основания."
+            "Нужно предложить 1-5 вариантов сегментации/нормализации только исходного текста блока. "
+            "Критично: НЕ переводи между языками, не перефразируй на другой язык, не добавляй новых слов. "
+            "Допустимы только split/merge, удаление служебных помет (перен., лит., мед., iun), "
+            "раскрытие сокращённой серии вида 'A, B, C X' -> 'A X | B X | C X'."
         )
 
         user_payload = {
@@ -380,24 +467,9 @@ class ArticleReviewService:
         content = message.get("content", "")
         reasoning = message.get("reasoning_content", "")
 
-        payload_text = content.strip() if isinstance(content, str) else ""
-        if not payload_text and isinstance(reasoning, str) and reasoning.strip():
-            # Некоторые локальные модели кладут финальный JSON в reasoning_content
-            # или оставляют там единственный JSON-блок.
-            reasoning_text = reasoning.strip()
-            start = reasoning_text.find("{")
-            end = reasoning_text.rfind("}")
-            if start != -1 and end != -1 and end > start:
-                payload_text = reasoning_text[start:end + 1].strip()
-
-        if not payload_text:
-            raise ValueError("Empty LM Studio response")
-        if "```" in payload_text:
-            payload_text = payload_text.replace("```json", "").replace("```", "").strip()
-
-        parsed = json.loads(payload_text)
+        parsed = _parse_lmstudio_payload(content=content, reasoning=reasoning)
         raw_candidates = parsed.get("candidates", []) if isinstance(parsed, dict) else []
-        candidates = [str(item).strip() for item in raw_candidates if str(item).strip()][:5]
+        candidates = _clean_candidates(raw_candidates)
         if not candidates:
             raise ValueError("LM Studio returned no candidates")
 
@@ -425,7 +497,8 @@ class ArticleReviewService:
         operator_action: Dict[str, Any],
     ) -> Dict[str, Any]:
         state = self._ensure_state(lang, art_id)
-        resolved = state.resolved_translations if isinstance(state.resolved_translations, dict) else {}
+        resolved_raw = state.resolved_translations if isinstance(state.resolved_translations, dict) else {}
+        resolved = dict(resolved_raw)
 
         groups = resolved.get("groups")
         if isinstance(groups, dict):
@@ -466,6 +539,8 @@ class ArticleReviewService:
 
         resolved["groups"] = groups
         state.resolved_translations = resolved
+        if hasattr(state, "_sa_instance_state"):
+            flag_modified(state, "resolved_translations")
         self.session.commit()
 
         return {
@@ -821,6 +896,128 @@ class ArticleReviewService:
             )
         )
         self.session.commit()
+
+
+def _extract_text_from_content(content: Any) -> str:
+    if isinstance(content, str):
+        return content.strip()
+
+    if isinstance(content, dict):
+        if isinstance(content.get("text"), str):
+            return content["text"].strip()
+        return json.dumps(content, ensure_ascii=False)
+
+    if isinstance(content, list):
+        parts: List[str] = []
+        for item in content:
+            if isinstance(item, str) and item.strip():
+                parts.append(item.strip())
+            elif isinstance(item, dict):
+                text_value = item.get("text")
+                if isinstance(text_value, str) and text_value.strip():
+                    parts.append(text_value.strip())
+        return "\n".join(parts).strip()
+
+    return ""
+
+
+def _extract_json_object(text: str) -> Optional[Dict[str, Any]]:
+    value = text.strip()
+    if not value:
+        return None
+
+    if "```" in value:
+        value = value.replace("```json", "").replace("```", "").strip()
+
+    candidates = [value]
+    if not (value.startswith("{") and value.endswith("}")):
+        for match in re.finditer(r"\{.*?\}", value, flags=re.DOTALL):
+            candidates.append(match.group(0).strip())
+
+    for chunk in candidates:
+        try:
+            parsed = json.loads(chunk)
+        except Exception:
+            continue
+        if isinstance(parsed, dict):
+            return parsed
+
+    return None
+
+
+def _parse_lmstudio_payload(*, content: Any, reasoning: Any) -> Dict[str, Any]:
+    if isinstance(content, dict):
+        return content
+
+    if isinstance(content, list) and content and all(isinstance(item, dict) for item in content):
+        first_dict = next((item for item in content if isinstance(item, dict) and "candidates" in item), None)
+        if isinstance(first_dict, dict):
+            return first_dict
+
+    payload_text = _extract_text_from_content(content)
+    parsed = _extract_json_object(payload_text)
+    if parsed:
+        return parsed
+
+    reasoning_text = reasoning.strip() if isinstance(reasoning, str) else ""
+    parsed_from_reasoning = _extract_json_object(reasoning_text)
+    if parsed_from_reasoning:
+        return parsed_from_reasoning
+
+    raise ValueError("Empty LM Studio response")
+
+
+def _looks_like_garbage_candidate(value: str) -> bool:
+    lowered = value.lower()
+    if re.search(r"(reasoning|explanation|final answer|i suggest|i chose|analysis)", lowered):
+        return True
+    if re.search(r"(вариант|объяснение|пояснение|рассуждение|ответ модели)", lowered):
+        return True
+    if value.count("{") or value.count("}"):
+        return True
+    if sum(ch.isalpha() for ch in value) == 0:
+        return True
+    return False
+
+
+def _strip_review_markers(value: str) -> str:
+    text = value.strip()
+    marker_re = re.compile(r"^(?:[а-яё]+\.|т\.е\.)\s+", flags=re.IGNORECASE)
+    while marker_re.match(text):
+        text = marker_re.sub("", text).strip()
+    return text
+
+
+def _normalize_candidate_text(value: str) -> str:
+    text = value.strip()
+    text = re.sub(r"^[\"'`«»]+|[\"'`«»]+$", "", text)
+    text = re.sub(r"^(?:[-*•]+|\d+[.)]|(?:candidate|вариант)\s*\d+[:.)-]*)\s*", "", text, flags=re.IGNORECASE)
+    text = _strip_review_markers(text)
+    text = re.sub(r"\s+", " ", text).strip()
+    text = re.sub(r"\s+([,.;:!?])", r"\1", text)
+    return text
+
+
+def _clean_candidates(raw_candidates: Any) -> List[str]:
+    if not isinstance(raw_candidates, list):
+        return []
+
+    cleaned: List[str] = []
+    seen: set[str] = set()
+    for item in raw_candidates:
+        candidate = _normalize_candidate_text(str(item))
+        if not candidate:
+            continue
+        if _looks_like_garbage_candidate(candidate):
+            continue
+        key = candidate.casefold()
+        if key in seen:
+            continue
+        seen.add(key)
+        cleaned.append(candidate)
+        if len(cleaned) >= 5:
+            break
+    return cleaned
 
 
 def _normalize_string(value: str) -> str:

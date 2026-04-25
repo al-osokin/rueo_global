@@ -130,7 +130,7 @@ def build_translation_review(parsed_article: Dict) -> TranslationReview:
 
 
 def _is_v4_review_enabled() -> bool:
-    raw = os.getenv("REVIEW_USE_PARSER_V4", "0").strip().lower()
+    raw = os.getenv("REVIEW_USE_PARSER_V4", "1").strip().lower()
     return raw in {"1", "true", "yes", "on"}
 
 

@@ -6,7 +6,11 @@ from fastapi.testclient import TestClient
 from app import admin
 from app.database import get_session
 from app.main import app
-from app.services.article_review import ArticleReviewService
+from app.services.article_review import (
+    ArticleReviewService,
+    _clean_candidates,
+    _parse_lmstudio_payload,
+)
 
 
 @pytest.fixture
@@ -208,6 +212,7 @@ def test_admin_v4_ast_endpoint_happy_path_contract(client, monkeypatch):
         "parse_error": None,
         "review_diagnostic": None,
         "v4_ast": expected_ast,
+        "resolved_blocks": {},
     }
 
 
@@ -329,6 +334,47 @@ def test_admin_v4_apply_resolution_validation_error(client):
     assert response.status_code == 422
 
 
+def test_admin_v4_reset_block_happy_path(client, monkeypatch):
+    class StubService:
+        def __init__(self, session):
+            self.session = session
+
+        def reset_block_resolution(self, lang, art_id, form_id, block_id):
+            assert lang == "eo"
+            assert art_id == 77
+            assert form_id == "form_0"
+            assert block_id == "block_1"
+            return {
+                "status": "ok",
+                "article_id": art_id,
+                "lang": lang,
+                "form_id": form_id,
+                "block_id": block_id,
+                "removed": True,
+            }
+
+    monkeypatch.setattr(admin, "ArticleReviewService", StubService)
+
+    response = client.post(
+        "/admin/v4/reset-block",
+        json={
+            "article_id": 77,
+            "lang": "eo",
+            "form_id": "form_0",
+            "block_id": "block_1",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "status": "ok",
+        "article_id": 77,
+        "lang": "eo",
+        "form_id": "form_0",
+        "block_id": "block_1",
+        "removed": True,
+    }
+
 
 def test_article_review_service_apply_resolution_persists_operator_action_to_groups_list():
     class FakeSession:
@@ -358,3 +404,64 @@ def test_article_review_service_apply_resolution_persists_operator_action_to_gro
     assert groups[0]["form_id"] == "form_0"
     assert groups[0]["block_id"] == "block_2"
     assert groups[0]["operator_action"] == {"action": "accept", "selected_candidate_id": "c1"}
+
+
+def test_article_review_service_load_article_ast_uses_cached_payload_without_reparse():
+    class FakeSession:
+        def commit(self):
+            raise AssertionError("commit should not be called when only loading cached AST")
+
+    service = ArticleReviewService.__new__(ArticleReviewService)
+    service.session = FakeSession()
+    service.parser = SimpleNamespace(parse_article_by_id=lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("parse should not be called")))
+
+    state = SimpleNamespace(
+        headword="abio",
+        parsing_status="reviewed",
+        parsed_payload={"meta": {"v4_ast": {"forms": [{"form_id": "f0", "blocks": []}]}}},
+        resolved_translations={"groups": [{"form_id": "f0", "block_id": "b1", "operator_action": {"action": "accept"}}]},
+    )
+    service._ensure_state = lambda lang, art_id: state
+
+    payload = service.load_article_ast("eo", 77)
+
+    assert payload["headword"] == "abio"
+    assert payload["parse_error"] is None
+    assert payload["v4_ast"] == {"forms": [{"form_id": "f0", "blocks": []}]}
+    assert payload["resolved_blocks"]["f0:b1"]["applied"] is True
+
+
+def test_clean_candidates_filters_reasoning_dedups_and_normalizes():
+    raw = [
+        "  Candidate 1: бета  ",
+        "бета",
+        "Explanation: I suggest this translation because ...",
+        "Вариант 2: бетта",
+        "```json {\"foo\":1}```",
+        "",
+    ]
+
+    assert _clean_candidates(raw) == ["бета", "бетта"]
+
+
+def test_parse_lmstudio_payload_supports_json_string_content():
+    parsed = _parse_lmstudio_payload(
+        content='{"candidates":["бета","гамма"],"confidence":0.9}',
+        reasoning="",
+    )
+
+    assert parsed["candidates"] == ["бета", "гамма"]
+
+
+def test_parse_lmstudio_payload_supports_content_array_and_reasoning_fallback():
+    from_array = _parse_lmstudio_payload(
+        content=[{"type": "text", "text": '{"candidates":["abio"],"confidence":0.5}'}],
+        reasoning="",
+    )
+    assert from_array["candidates"] == ["abio"]
+
+    from_reasoning = _parse_lmstudio_payload(
+        content="analysis... no json here",
+        reasoning='Some chain of thought {"candidates":["advokati","juristoj"],"confidence":0.8}',
+    )
+    assert from_reasoning["candidates"] == ["advokati", "juristoj"]

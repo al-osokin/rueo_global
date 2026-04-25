@@ -104,6 +104,7 @@ class ArticleAstPayload(BaseModel):
     parse_error: Optional[str] = None
     review_diagnostic: Optional[Dict[str, str]] = None
     v4_ast: Optional[Dict[str, Any]] = None
+    resolved_blocks: Dict[str, Any] = Field(default_factory=dict)
 
 
 class ResolveBlockRequest(BaseModel):
@@ -143,6 +144,22 @@ class ApplyResolutionResponse(BaseModel):
     form_id: str
     block_id: str
     operator_action: Dict[str, Any]
+
+
+class ResetBlockRequest(BaseModel):
+    article_id: int = Field(..., ge=1)
+    lang: str = Field(..., min_length=2, max_length=4)
+    form_id: str = Field(..., min_length=1)
+    block_id: str = Field(..., min_length=1)
+
+
+class ResetBlockResponse(BaseModel):
+    status: str
+    article_id: int
+    lang: str
+    form_id: str
+    block_id: str
+    removed: bool
 
 _state_lock = threading.Lock()
 _state = {
@@ -376,6 +393,19 @@ def apply_resolution(payload: ApplyResolutionRequest, session=Depends(get_sessio
         payload.operator_action.model_dump(exclude_none=True),
     )
     return ApplyResolutionResponse(**result)
+
+
+@router.post("/v4/reset-block", response_model=ResetBlockResponse)
+def reset_block_resolution(payload: ResetBlockRequest, session=Depends(get_session)):
+    _ensure_lang(payload.lang)
+    service = ArticleReviewService(session)
+    result = service.reset_block_resolution(
+        payload.lang,
+        payload.article_id,
+        payload.form_id,
+        payload.block_id,
+    )
+    return ResetBlockResponse(**result)
 
 
 @router.post("/articles/{lang}/{art_id}/reparse", response_model=ArticleReparseResponse)
