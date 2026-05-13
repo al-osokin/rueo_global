@@ -148,56 +148,7 @@ export default {
 
   data() {
     return {
-      mecenatoj: [
-        "Денис Аристов",
-        "Александр Басов",
-        "Геннадий Басов",
-        "Михаил Бронштейн",
-        "Стас Бушуев",
-        "Тимофей Вшивцев",
-        "Татьяна Вшивцева",
-        "Диляра Гадирова",
-        "Гафур Газизов",
-        "Татьяна Глазница",
-        "Игорь Денисов",
-        "Дмитрий Доценко",
-        "Сергей Жилейкин",
-        "Борис Зозуля",
-        "Вячеслав Иванов",
-        "Георгий Кеворкянц",
-        "Иван Китайкин",
-        "Сергей Кумков",
-        "Виктор Лаптев",
-        "Александр Лебедев",
-        "Татьяна Лоскутова",
-        "Елена Надикова",
-        "Людмила Новикова",
-        "Владимир Оплетаев",
-        "Михаил Поворин",
-        "Вячеслав Рождественский",
-        "Анатолий Сидоров",
-        "Олеся Соболевская",
-        "Андрей Спасибожко",
-        "Валентина Спицина",
-        "Cергей Страшненко",
-        "Александра Судакова",
-        "Галина Терентьева",
-        "Елена Успенская",
-        "Пётр Федосов",
-        "Валерия Цветкова",
-        "Лариса Шапошникова",
-        "Геннадий Шлепченко",
-        "Денис",
-        "Rotheran",
-        "Pascal Dubourg Glatigny (Francio)",
-        "Участники курсов Т.Г.Лоскутовой",
-        "Rusia Esperantista Unio (REU)",
-        "Sankt-Peterburga E-klubo «Kariljono»",
-        "Moskva Esperanto-Asocio MASI",
-        "Libroservo de Ĉelabinska E-klubo",
-        "Tiĥvinaj Esperanto Metiejoj (TEMoj)",
-        "Teknokomo",
-      ],
+      mecenatoj: [],
       skipo: [
         {
           img: "Boris.jpg",
@@ -262,7 +213,28 @@ export default {
       ],
     };
   },
+
+  async mounted() {
+    await this.loadMecenatoj();
+  },
   methods: {
+    async loadMecenatoj() {
+      try {
+        const response = await fetch("/mecenatoj.txt");
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        const text = await response.text();
+        this.mecenatoj = text
+          .split(/\r?\n/)
+          .map((line) => line.trim())
+          .filter((line) => line && !line.startsWith("#"));
+      } catch (error) {
+        console.error("Error loading mecenatoj:", error);
+        this.mecenatoj = [];
+      }
+    },
     infoImageSrc(filename) {
       return new URL(`../assets/info/${filename}`, import.meta.url).href;
     },

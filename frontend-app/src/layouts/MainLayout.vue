@@ -293,7 +293,7 @@
               </router-link>
               <div class="text-grey-8">
                 <p class="no-margin">
-                  © 2009-2025, Большие словари
+                  © 2009-{{ currentYear }}, Большие словари
                   <strong>Бориса Кондратьева</strong>
                 </p>
               </div>
@@ -358,6 +358,9 @@ export default defineComponent({
     };
   },
   computed: {
+    currentYear() {
+      return new Date().getFullYear();
+    },
     isDark() {
       return this.currentTheme === ThemeMode.DARK;
     },

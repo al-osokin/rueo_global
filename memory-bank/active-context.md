@@ -1,0 +1,41 @@
+# Active Context — rueo.ru (prod)
+
+Updated: 2026-05-13 15:20 (Europe/Moscow)
+
+## Where we are
+- Рабочий проект: `~/rueo_master` (prod / Stage I + dictionary update pipeline).
+- Последняя текущая задача: minor frontend content/code cleanup для страницы `info.vue` и версии приложения.
+
+## 2026-05-13 — frontend minor update prepared
+
+Изменения в `rueo_master`:
+- Список меценатов вынесен из `frontend-app/src/pages/info.vue` в редактируемый текстовый файл `frontend-app/public/mecenatoj.txt`.
+  - Формат: одна непустая строка = один меценат.
+  - Строки, начинающиеся с `#`, игнорируются как комментарии.
+  - В список добавлены `Наталья Машкова` и `Айрат Миргалиев`.
+- `info.vue` загружает `/mecenatoj.txt` через `fetch` при `mounted()`.
+- В `frontend-app/src/layouts/MainLayout.vue` копирайт переведён с фиксированного `2009-2025` на динамический `2009-{{ currentYear }}`.
+- Версия frontend/PWA поднята `1.0.5 → 1.0.6` в:
+  - `frontend-app/package.json`
+  - `frontend-app/package-lock.json`
+  - `frontend-app/public/package.json`
+
+Проверки:
+- `npm run build` в `frontend-app` — успешно.
+- `frontend-app/dist/spa/package.json` содержит `1.0.6`.
+- `frontend-app/dist/spa/mecenatoj.txt` создаётся при сборке.
+
+Синхронизация с Stage II:
+- Та же правка перенесена в `~/rueo_global`, но там оставлена без коммита, потому что в worktree уже висят незакоммиченные разработки Stage II.
+
+## Previous prod dictionary update
+- 2026-05-08 выполнено очередное обновление словаря с последним русским словом `придерживаться`.
+- Пайплайн: Dropbox sync-in → local import → sync-back → local DB dump → restore server DB → deploy `backend/data/tekstoj/{klarigo,renovigxo}.md`.
+- Проверки после пайплайна:
+  - `backend/data/src/last-ru-letter.txt` содержит `придерживаться`.
+  - `https://rueo.ru/` отвечает HTTP 200.
+  - `https://rueo.ru/search?query=придерживаться` отвечает и возвращает 1 совпадение.
+
+## Next step
+- По запросу Саши: обсудить деплой подготовленного `rueo_master` minor update.
+- Перед деплоем проверить, какие именно файлы нужно выкладывать: собранный `frontend-app/dist/spa/*`, включая `package.json`, `mecenatoj.txt`, новые hashed assets.
