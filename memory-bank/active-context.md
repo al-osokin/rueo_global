@@ -36,6 +36,26 @@ Updated: 2026-05-13 15:20 (Europe/Moscow)
   - `https://rueo.ru/` отвечает HTTP 200.
   - `https://rueo.ru/search?query=придерживаться` отвечает и возвращает 1 совпадение.
 
+## 2026-05-13 — PWA deploy automation
+
+Создан скрипт `scripts/deploy_frontend_pwa.sh`:
+- Собирает frontend командой `npx quasar build -m pwa`.
+- Синхронизирует `frontend-app/dist/pwa/` в `root@rueo.ru:/var/www/slovari/data/www/rueo.ru/` через `rsync`.
+- По умолчанию работает как dry-run; реальный деплой — `./scripts/deploy_frontend_pwa.sh --apply`.
+- Использует `--delete`, чтобы убирать старые hashed assets и старые `manifest-*.json`.
+- Защищает серверные директории от удаления:
+  - `/backend/`
+  - `/webstat/`
+  - `/cgi-bin/`
+- Выставляет владельца новых/обновлённых файлов через `--chown=slovari:slovari`.
+
+Проверка реальным деплоем выполнена:
+- `https://rueo.ru/package.json` отвечает 200 и содержит `version = 1.0.6`.
+- `https://rueo.ru/mecenatoj.txt` отвечает 200.
+- `https://rueo.ru/` отвечает 200.
+- На сервере остался только `manifest-1.0.6.json`; старый `manifest-1.0.5.json` удалён физически.
+- Protected dirs на сервере сохранены: `backend`, `webstat`, `cgi-bin`.
+
 ## Next step
-- По запросу Саши: обсудить деплой подготовленного `rueo_master` minor update.
-- Перед деплоем проверить, какие именно файлы нужно выкладывать: собранный `frontend-app/dist/spa/*`, включая `package.json`, `mecenatoj.txt`, новые hashed assets.
+- Если деплой считается успешным — закоммитить deploy script в `rueo_master`.
+- Для следующих minor frontend-деплоев использовать `./scripts/deploy_frontend_pwa.sh --apply`.
