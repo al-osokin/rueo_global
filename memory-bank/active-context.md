@@ -1,127 +1,81 @@
 # Active Context — rueo_global
 
-Updated: 2026-04-25 (Europe/Moscow)
+Updated: 2026-05-16 01:35 (Europe/Moscow)
 
-## Update (AdminV4 stability pass, 2026-04-25 night)
-- В `review-v4` отключён автопереразбор при открытии статьи: AST читается из сохранённого `parsed_payload`; добавлена явная кнопка `Переразобрать статью`.
-- Добавлены сбросы:
-  - `Сбросить подтверждения статьи` (article-level reset);
-  - `Сбросить этот блок` + backend endpoint `POST /admin/v4/reset-block`.
-- Улучшена UX карточки `Выбранный блок`:
-  - убран агрессивный автоскролл страницы;
-  - карточка позиционируется рядом с выбранным блоком (dynamic sticky top), без ухода в невидимую область.
-- Добавлен многослойный вывод блока (верхним слоем более поздний результат, исходник ниже).
-- Критичный фикс сохранения Apply после refresh:
-  - причина: изменения JSON-поля `resolved_translations` могли не фиксироваться ORM;
-  - решение: принудительная пометка изменения (`flag_modified`) при apply/reset block;
-  - подтверждено вручную и через API-проверку: после refresh подтверждения сохраняются.
-- Проверки после правок:
-  - `PYTHONPATH=. pytest tests/test_admin_v4_endpoints.py -q` → 16 passed;
-  - `npm run build` (frontend-app) → build succeeded.
+## Current governing workflow
+- Primary task contour for `rueo_global` / Stage II is now YouTrack project `eoru` / **Словари**.
+- Workflow rules are saved in `memory-bank/YOUTRACK_WORKFLOW.md`.
+- Assistant-created development tasks must be explicitly set to:
+  - `Type`: `Задание` / `Task`
+  - `State`: `Открыта` / `Open`
+  - `Subsystem`: `Движок ST II`
+- Project memory is handoff/research context, not an independent backlog. If memory implies executable work, use YouTrack first and keep memory as a pointer.
 
-## Update (pause/handoff, 2026-04-25)
-- Зафиксирована пауза по проекту на конец недели (пользователь занят).
-- Контекст сохранён без новых кодовых изменений; задача — безопасно возобновиться с текущей точки без потерь.
-- Режим возврата: начать с shortlist 10 кейсов в `/admin/review-v4`, затем перенести решения в mini-regression.
+## Cross-worktree sync rule
+- `rueo_master` is prod / Stage I, while this tree is Stage II development.
+- Be very careful with commits in `rueo_master`: before committing prod changes, check whether each change must also be ported here to avoid Stage II regressions.
+- Do not assume a `rueo_master`-only fix is complete unless it is deliberately prod-only; apply or explicitly record the corresponding `rueo_global` change first.
+- Sasha explicitly reminded this on 2026-06-06 after the prod dictionary update to `призвание`.
+- Audit plan saved in `memory-bank/MASTER_GLOBAL_SYNC_AUDIT.md`.
 
-## Update (AdminV4 UX+hydrate, recovered from chat)
-- Добавлена автодоводка карточки `Выбранный блок`: при выборе блока выполняется `scrollIntoView` (sticky-only поведение признано неудобным при глубокой прокрутке).
-- Исправлено восстановление подтверждений после refresh:
-  - backend `GET /admin/v4/articles/{lang}/{art_id}/ast` теперь отдаёт `resolved_blocks`;
-  - frontend в `loadAst()` гидратит `blockFlags` (`applied/dirty`) из `resolved_blocks`.
-- Верификация после правок: `pytest backend/tests/test_admin_v4_endpoints.py` — 14 passed; `npm run build` — ok.
-- Нюанс данных: legacy-записи в `resolved_translations.groups` без `form_id/block_id` (`None`) не маппятся к конкретным блокам в UI.
-- Следующий шаг (опционально): миграционный эвристический костыль для article 77, чтобы попытаться сопоставить legacy-группы блокам и показать их в UI.
+## 2026-05-16 — YouTrack migration from accumulated memory
 
-## Update (new)
-- Выполнено feasibility-исследование workflow `parser_v4 + Gemma` на первых 120 статьях словаря (`artikoloj_ru`, `ORDER BY art_id LIMIT 120`).
-- Результат сохранён: `memory-bank/tasks/2026-04-21-parser-v4-gemma-feasibility-first120.md`.
-- Подготовлены: паттерны проблем, план L0+эскалации в Gemma, JSON-схема ответа, confidence/flags, chunking, Telegram-сценарий.
-- Проверен текущий путь интеграции `/admin/v4/resolve-block`: сейчас это `gemma-assist-stub` (dry-run подтверждён, live Gemma ещё не подключена).
+Created Stage II issues from accumulated `memory-bank` notes:
+- `eoru-1415` — `[ST II] L0 + model arbitration for ambiguous RU translation blocks`.
+- `eoru-1416` — `[ST II] Finish parser_v4 hard-case validation and mini-regression`.
+- `eoru-1417` — `[ST II] Route parser_v4 review flags to Gemma/manual review flow`.
+- `eoru-1418` — `[ST II] Resume /admin/review-v4 validation pass on shortlist cases`.
+- `eoru-1423` — `[ST II] Resolve parser_v4 snapshot smoke mismatch`.
 
+All five were verified via YouTrack API as:
+- `Type`: `Task`
+- `State`: `Open`
+- `Subsystem`: `Движок ST II`
 
+Support file:
+- `/home/avo/clawd/research/youtrack/rueo_memory_to_youtrack.py`
 
-## Update (Gemma Assist quality, follow-up after 4b9c37b)
-- В `backend/app/services/article_review.py` усилен LM Studio parser для `/admin/v4/resolve-block`:
-  - поддержка `message.content` как dict / JSON-строка / массив чанков;
-  - fallback на JSON-блок из `reasoning_content` (если в content валидного JSON нет);
-  - reasoning в candidates больше не протекает (берём только поле `candidates` из распарсенного JSON).
-- Добавлена пост-обработка candidates: нормализация пробелов/пунктуации, удаление служебных/объяснительных хвостов, фильтрация мусора, dedup (case-insensitive), limit 5.
-- Добавлены тесты в `backend/tests/test_admin_v4_endpoints.py` на:
-  - воспроизведение дублей/англ. explanatory leakage и их фильтрацию;
-  - парсинг JSON-строки в content;
-  - парсинг content-массива + fallback на JSON из reasoning.
+Detailed old task/research notes were moved out of the live backlog to:
+- `memory-bank/archive/youtrack-migrated-2026-05-16/`
 
-## Where we left off
-- Восстановлен контекст после аварии сессии/сброса контекста.
-- По словам из последнего рабочего отчёта (до поломки):
-  1. **Parser fix (backend, parser_v4)**
-     - Цель: `_см._` / `_ср._` классифицировать только как reference/note, никогда не как sense.
-     - Изменён `backend/app/parsing/parser_v4/pipeline.py`:
-       - добавлен helper `_is_reference_note(...)`;
-       - в `_append_block(...)` для нумерованных строк ссылочные строки идут в `type="note"`.
-     - Кейс id77 `abortulo 1`: `1. _см._ ~ajxo;` должен быть `note`, не `sense`.
-  2. **Тесты parser_v4**
-     - Добавлен регрессионный тест в `backend/tests/test_parser_v4_merge.py`:
-       - `test_id77_abortulo_first_numbered_reference_is_note_not_sense`.
-     - Обновлён snapshot: `backend/tests/fixtures/parser_v4_golden.json`.
-  3. **Frontend /admin/review-v4 actionability**
-     - В `frontend-app/src/pages/AdminV4Review.vue` добавлены действия по выбранному блоку:
-       - `Accept / Reject / Edit`;
-       - для `Edit` — поле ввода;
-       - отправка в `POST /admin/v4/apply-resolution`;
-       - визуальная метка `applied` после успешного применения.
+Live backlog is YouTrack now; archived files are evidence/context only.
 
-## Verification reported previously
-- Backend tests (пакет parser/admin): **22 passed**.
-- Frontend build: **build succeeded**.
-- Коммит не делался.
+## Recent technical context preserved from earlier handoff
 
-## Current blocker / trust context
-- Была проблема дисциплины исполнения в агенте: статусы без реального запуска действия.
-- Договорённость с пользователем (Саша):
-  - сначала реальный запуск процесса/субагента,
-  - потом статус с явным указанием, что именно запущено (и id, когда применимо).
+### AdminV4 / parser_v4 stability
+- `review-v4` had been stabilized so AST reads saved `parsed_payload`, with explicit `Переразобрать статью`.
+- Added reset actions:
+  - article-level reset;
+  - block-level reset via `POST /admin/v4/reset-block`.
+- Apply/reset persistence was fixed via ORM `flag_modified` on JSON fields.
+- Previous reported checks:
+  - parser/admin backend tests passed;
+  - frontend build succeeded.
 
-## Update (hard cases set for parser_v4 EO↔RU)
-- Подготовлен репрезентативный набор сложных кейсов для совместной ручной валидации:
-  - файл: `memory-bank/tasks/2026-04-21-parser-v4-hard-cases-eo-ru.md`.
-  - объём: 50 кейсов (25 переводов + 25 примеров).
-  - есть кластеризация по паттернам (`_или_`, списки `,`/`;`, тильда `~`, пометы `_перен._/_мед._/_т.е._/_см._/_ср._`, нумерованные блоки и т.д.).
-  - для каждого кейса: `article_id`, `headword`, RU/EO фрагменты, причина сложности, ожидаемая нормализация `eo|ru`, confidence.
-  - отдельно выделен shortlist из 10 быстрых показательных кейсов для прохода в `/admin/review-v4`.
+### Parser quality direction
+- Current direction is to reduce unsafe L0 heuristics and move ambiguous cases to structured model arbitration (`eoru-1415`).
+- Hard-case validation and regression fixture work is tracked in `eoru-1416`.
+- Routing from parser_v4 flags (`clean`, `line-merge-risk`, `many-to-many`) into model/manual review is tracked in `eoru-1417`.
+- Human-in-the-loop shortlist pass in `/admin/review-v4` is tracked in `eoru-1418`.
 
-## Where we left off
-- Feasibility + quality groundwork по `parser_v4` и `resolve-block` сделан (см. выше).
-- Теперь добавлен датасет трудных кейсов для совместного разбора с пользователем и уточнения правил L0/Gemma/manual.
+### Confirmed parser rules from memory
+- `;` is a reliable sense separator.
+- `_или_` / `aux` branches alternatives.
+- `_см._` / `_ср._` are reference notes, not senses/translations.
+- Direct brackets without a preceding space are intra-word variants: `(с)делать`, `орангутан(г)`.
+- Direct brackets with a preceding space are optional word/segment variants: `анализ (крови)`.
+- Italic parentheses are usually labels/notes, not translation tokens.
+- RU→EO multiline merge: final `,`, `;`, or `.` is a strong line-ending signal; otherwise the next line may need merging.
+- For dirty/truncated fragments, prefer `incomplete/manual review` over unsafe auto-normalization.
 
-## Next step when resuming
-1. Пройти shortlist (10 кейсов) в `/admin/review-v4` вместе с пользователем и зафиксировать фактические Accept/Edit/Reject.
-2. На основе расхождений обновить механические правила (L0): `_или_`-ветвление, split по `;`/`,`, поведение `~`, фильтрация reference-note.
-3. Для остатка из 50 кейсов пометить, какие блоки лучше отдавать в Gemma (ambiguous), какие — решать детерминированно.
-4. После ручной валидации подготовить mini-regression набор для parser_v4 (fixtures + expected normalized pairs).
+## Current status
+- Stage II memory backlog has been moved into YouTrack issues `eoru-1415`–`eoru-1418` and `eoru-1423`.
+- Detailed research files were archived under `memory-bank/archive/youtrack-migrated-2026-05-16/`; `memory-bank/tasks/` is no longer the live backlog.
+- There is an uncommitted new `memory-bank/YOUTRACK_WORKFLOW.md` and updated `memory-bank/active-context.md`; do not commit without Sasha’s confirmation.
+- Current additional caution: `rueo_master` may contain prod/content changes that need mirroring into this Stage II tree before any commit is finalized.
+- 2026-06-06: `frontend-app/public/mecenatoj.txt` patron-list correction from `rueo_master` was ported here.
 
-
-## Update (road validation session, 2026-04-21)
-- Проведена оперативная ручная валидация в чате (в дороге) по сложным EO↔RU кейсам из набора `2026-04-21-parser-v4-hard-cases-eo-ru.md`.
-- Подтверждены/уточнены правила:
-  - `;` — надёжный разделитель значений;
-  - `(_или_)` в EO/RU раскрывать в варианты;
-  - прямые скобки в RU/EO раскрывать в отдельные варианты (напр. `не ахти как (хорошо)` → два варианта);
-  - курсивные скобки — чаще note/preamble, не отдельный перевод;
-  - `_см._/_ср._` — reference-note, не перевод;
-  - при раскрытии скобок в одной стороне соответствие часто many-to-many, не index-alignment;
-  - если фрагмент обрезан/грязный (`fragment-truncated`) — не автонормализовать, отложить до полного контекста.
-- Зафиксированы эталоны для ключевых случаев:
-  - `aborto`: `преждевременные роды | самопроизвольный аборт | естественный аборт | спонтанный аборт`;
-  - `aborta`: `абортивный | недоношенный | недоразвитый | остановившийся в развитии`;
-  - `abortajxo`: `недоносок | выкидыш | абортус | нежизнеспособный плод`;
-  - `advokati`: `выступать в роли адвоката | выступать в роли защитника | адвокатствовать | работать адвокатом`;
-  - EO list alignment: `akuta/orta/malakuta/strecxita angulo` ↔ `острый/прямой/тупой/развёрнутый угол`.
-- Отложены как `unresolved`/`incomplete` кейсы с потерей хвоста/контекста (в т.ч. case 17 и case 41) для проверки у компьютера.
-
-## Next step when resuming
-1. Перенести подтверждённые эталоны в fixture/mini-regression набор parser_v4.
-2. Добавить в post-processing правила для прямых скобок и EO `_или_`-ветвлений (без перераздувания шаблонов).
-3. Реализовать режим many-to-many соответствия для случаев с односторонним раскрытием скобок.
-4. Довести `fragment-truncated/incomplete` кейсы по полным строкам из корпуса и закрыть unresolved список.
+## Next step when resuming Stage II
+1. Open the relevant YouTrack issue first.
+2. If doing hands-on validation with Sasha, start with `eoru-1418`.
+3. If doing implementation, likely start with `eoru-1415` or `eoru-1416` depending on whether the focus is architecture or fixture-backed parser fixes.
