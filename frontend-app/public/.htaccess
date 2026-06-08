@@ -24,16 +24,23 @@
   RewriteRule . /index.html [L]
 </IfModule>
 
-# Отключаем кэширование для service-worker.js
+# Отключаем кэширование для service worker
 <IfModule mod_headers.c>
-  <Files "service-worker.js">
+  <FilesMatch "^(sw|service-worker)\.js$">
+    Header set Cache-Control "no-cache, no-store, must-revalidate"
+    Header set Pragma "no-cache"
+    Header set Expires "0"
+  </FilesMatch>
+
+  # Разрешаем доступ к package.json без кэширования
+  <Files "package.json">
     Header set Cache-Control "no-cache, no-store, must-revalidate"
     Header set Pragma "no-cache"
     Header set Expires "0"
   </Files>
-  
-  # Разрешаем доступ к package.json без кэширования
-  <Files "package.json">
+
+  # Новости редактируются отдельно от сборки PWA и не должны застревать в кэше
+  <Files "news.md">
     Header set Cache-Control "no-cache, no-store, must-revalidate"
     Header set Pragma "no-cache"
     Header set Expires "0"

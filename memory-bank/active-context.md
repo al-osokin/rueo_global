@@ -79,3 +79,37 @@ Live backlog is YouTrack now; archived files are evidence/context only.
 1. Open the relevant YouTrack issue first.
 2. If doing hands-on validation with Sasha, start with `eoru-1418`.
 3. If doing implementation, likely start with `eoru-1415` or `eoru-1416` depending on whether the focus is architecture or fixture-backed parser fixes.
+## 2026-06-08 — PWA news refresh cache fix ported from rueo_master
+
+Sasha reported in the `rueo_master` context that updated prod `news.md` was not appearing in the PWA even after manual refresh and cache clearing.
+
+Ported the local fix from `rueo_master` to avoid Stage II regression:
+- `frontend-app/src/components/NewsFeed.vue`: fetch `/news.md?ts=...` with `cache: 'no-store'`, store raw source text, and detect edits by text changes rather than item count only.
+- `frontend-app/src-pwa/custom-service-worker.js`: exclude `news.md` from precache and serve `/news.md` network-only.
+- `frontend-app/public/.htaccess`: no-cache headers for both `sw.js`/`service-worker.js` and `news.md`.
+- frontend version bumped locally to `1.0.7` to match `rueo_master` and keep PWA update detection aligned.
+
+Verification:
+- `npm --prefix frontend-app run build -- -m pwa` passed in `rueo_global`.
+
+Prod deploy was done from `rueo_master` only after Sasha approved:
+- Deployed frontend `1.0.7` to origin via `SERVER_SSH=root@72.56.13.203 ./scripts/deploy_frontend_pwa.sh --apply --skip-build`.
+- Live Nginx headers were also fixed on origin for `/package.json`, `/news.md`, and `sw.js` because `.htaccess` is not active on that contour.
+
+No commit has been made. Existing unrelated dirty Stage II files remain: `frontend-app/src/pages/AdminV4Review.vue`, `.learnings/`, `backend/.env.lmstudio`.
+
+Follow-up local fix on 2026-06-08:
+- Sasha noticed in prod that the first `#` heading in a `news.md` block rendered smaller than later `#` headings.
+- Root cause was the same in Stage II: `NewsFeed.vue` extracts the first `# ...` into `item.title`, removes it from Markdown, and rendered it as `div.text-h6`.
+- Ported the `rueo_master` fix: extracted news titles now render as semantic `<h1 class="news-card-title">` with the same size as Markdown `h1`, keeping only card-specific zero margin.
+- Frontend version bumped locally to `1.0.8` to match `rueo_master`.
+- Verification: `npm --prefix frontend-app run build -- -m pwa` passed.
+
+News structure follow-up on 2026-06-08:
+- Ported the `rueo_master` parser change for the new news file structure: `#` headings are top-level sections, `##` headings are individual news items.
+- In `rueo_master`, `frontend-app/public/news.md` is an absolute symlink to `/home/avo/.rueo-shared/news.md` and is explicitly ignored by `.gitignore`; the shared news content is not part of this repo commit.
+- Pagination and homepage limits count only `##` items; intro-only sections such as `ПЕРЕПИСКА` render outside the item count.
+- Rendering groups visible news items under one section heading, so `#` headings are not duplicated per item.
+- Homepage limit remains 5 news items; `/novajxoj` still paginates 10/20/50 items.
+- Verification: `npm --prefix frontend-app run build -- -m pwa` passed.
+- Not deployed.
