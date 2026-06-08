@@ -9,7 +9,9 @@ REPO_DIR="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
 FRONTEND_DIR="${REPO_DIR}/frontend-app"
 DIST_DIR="${FRONTEND_DIR}/dist/pwa"
 
-SERVER_SSH_DEFAULT="root@rueo.ru"
+# While public rueo.ru is routed through the emergency proxy, deploy to the
+# Timeweb origin IP directly. Override SERVER_SSH when normal routing is back.
+SERVER_SSH_DEFAULT="root@72.56.13.203"
 SERVER_WEB_ROOT_DEFAULT="/var/www/slovari/data/www/rueo.ru"
 SERVER_OWNER_DEFAULT="slovari:slovari"
 

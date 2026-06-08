@@ -53,7 +53,17 @@ News structure follow-up on 2026-06-08:
 - Rendering now groups visible news items back under their section headings, so `#` headings are shown once per visible section and `##` headings are not duplicated.
 - Homepage limit remains 5 news items; `/novajxoj` still paginates 10/20/50 items.
 - Verification after parser change: `npm --prefix frontend-app run build -- -m pwa` passed in both `rueo_master` and `rueo_global`.
-- Not deployed yet.
+- Prod deploy completed on 2026-06-08 04:43 MSK:
+  - Deployed from `rueo_master` to origin explicitly with `SERVER_SSH=root@72.56.13.203 ./scripts/deploy_frontend_pwa.sh --apply`.
+  - First deploy showed live `/package.json` as `1.0.8`, but the built `/sw.js` still used `CACHE_VERSION = 'v1.0.7'` because `frontend-app/src-pwa/custom-service-worker.js` has a separate manual constant.
+  - Fixed `CACHE_VERSION` to `v1.0.8` in both `rueo_master` and `rueo_global`, rebuilt, and redeployed.
+  - Live verification through public `https://rueo.ru/` and direct origin `--resolve rueo.ru:443:72.56.13.203`: `/package.json` returns `1.0.8`; `/sw.js` contains `c="v1.0.8"` and network-only `/news.md`; `/sw.js` still has no-cache headers.
+  - `npm --prefix frontend-app run build -- -m pwa` passed in `rueo_global` after the service-worker constant fix.
+- Not committed after this deploy. Current expected local changes: `frontend-app/src-pwa/custom-service-worker.js` in both worktrees and this `memory-bank/active-context.md`; `rueo_global` also has pre-existing unrelated dirty files (`AdminV4Review.vue`, `.learnings/`, `backend/.env.lmstudio`).
+- Deployment defaults follow-up on 2026-06-08:
+  - While the Timeweb network path is unreliable and public `rueo.ru` lives behind the emergency proxy, `scripts/deploy_frontend_pwa.sh` and `scripts/rueo_update.sh` now default to `SERVER_SSH=root@72.56.13.203` in both `rueo_master` and `rueo_global`.
+  - Added `memory-bank/FRONTEND_DEPLOYMENT.md` in both worktrees with the current deploy channel and PWA version-bump rules.
+  - Important version rule: use `frontend-app/bump-version.sh <version>`; the version is not only in `package.json`, it must also be synchronized to `package-lock.json`, `public/package.json`, and `src-pwa/custom-service-worker.js` (`CACHE_VERSION`).
 
 ## Where we are
 - Рабочий проект: `~/rueo_master` (prod / Stage I + dictionary update pipeline).
