@@ -10,7 +10,7 @@ const manifest = self.__WB_MANIFEST || [];
 
 // ВАЖНО: Версия должна совпадать с версией в package.json
 // При изменении версии в package.json также обновите эту константу
-const CACHE_VERSION = 'v1.0.5';
+const CACHE_VERSION = 'v1.0.7';
 const CACHE_NAME = `quasar-pwa-${CACHE_VERSION}`;
 const API_CACHE_NAME = `quasar-pwa-api-${CACHE_VERSION}`;
 
@@ -28,6 +28,7 @@ const SYSTEM_FILES = [
   '.sql',
   '.db',
   'api-proxy',
+  'news.md',
   'robots.txt',
   'sitemap.xml',
   'manifest'
@@ -122,6 +123,13 @@ self.addEventListener('fetch', event => {
   if (!event.request.url.startsWith('http') || 
       EXTERNAL_URLS.some(external => event.request.url.includes(external)) ||
       event.request.url.includes('.php')) {
+    return;
+  }
+
+  // Новости должны всегда приходить из сети: это редактируемый контент,
+  // а не версионированный PWA-asset.
+  if (event.request.url.includes('/news.md')) {
+    event.respondWith(fetch(event.request));
     return;
   }
 

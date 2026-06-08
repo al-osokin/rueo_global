@@ -1,4 +1,4 @@
- :maxItems="5" <template>
+<template>
   <div class="news-feed q-mt-md">
     <div v-if="showTitle" class="q-mb-md">
       <div class="flex justify-between items-center">
@@ -38,7 +38,7 @@
     <div v-else-if="error" class="text-negative q-pa-md">
       Не удалось загрузить новости
     </div>
-    <div v-else-if="newsItems.length === 0" class="text-grey q-pa-md">
+    <div v-else-if="visibleNewsSections.length === 0" class="text-grey q-pa-md">
       Новостей пока нет
     </div>
     <div v-else>
@@ -60,17 +60,25 @@
       </div>
 
       <q-card
-        v-for="(item, index) in newsItems"
-        :key="index"
+        v-for="section in visibleNewsSections"
+        :key="section.id"
         class="news-card q-mb-md"
         flat
         bordered
       >
-        <q-card-section>
-          <div class="text-h6">{{ item.title }}</div>
+        <q-card-section class="news-section-title-section">
+          <h1 class="news-section-title">{{ section.title }}</h1>
         </q-card-section>
-        <q-card-section class="q-pt-none">
-          <div v-html="item.content"></div>
+        <q-card-section v-if="section.introHtml" class="q-pt-none">
+          <div class="news-content" v-html="section.introHtml"></div>
+        </q-card-section>
+        <q-card-section
+          v-for="item in section.items"
+          :key="item.id"
+          class="news-item-section"
+        >
+          <h2 class="news-item-title">{{ item.title }}</h2>
+          <div class="news-content" v-html="item.content"></div>
         </q-card-section>
       </q-card>
 
@@ -118,6 +126,7 @@ export default {
   },
   data() {
     return {
+      newsSections: [],
       allNewsItems: [],
       loading: false,
       error: false,
@@ -125,7 +134,8 @@ export default {
       internalItemsPerPage: 10,
       lastUpdate: null,
       updateInterval: null,
-      autoUpdateEnabled: true
+      autoUpdateEnabled: true,
+      newsSourceText: ''
     }
   },
   computed: {
@@ -137,6 +147,23 @@ export default {
       const start = (this.currentPage - 1) * this.itemsPerPage
       const end = start + this.itemsPerPage
       return this.allNewsItems.slice(start, end)
+    },
+    visibleNewsSections() {
+      const visibleItemIds = new Set(this.newsItems.map(item => item.id))
+      const showIntroSections = !this.enablePagination || this.currentPage === 1
+
+      return this.newsSections
+        .map(section => {
+          const items = section.items.filter(item => visibleItemIds.has(item.id))
+          const introHtml = showIntroSections ? section.introHtml : ''
+
+          return {
+            ...section,
+            introHtml,
+            items
+          }
+        })
+        .filter(section => section.introHtml || section.items.length > 0)
     },
     totalPages() {
       if (!this.enablePagination) return 1
@@ -171,13 +198,11 @@ export default {
       this.error = false
 
       try {
-        const response = await fetch('/news.md')
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`)
-        }
-        const text = await response.text()
+        const text = await this.fetchNewsText()
         const newsData = this.parseMarkdownNews(text)
-        this.allNewsItems = newsData
+        this.newsSections = newsData.sections
+        this.allNewsItems = newsData.items
+        this.newsSourceText = text
         this.lastUpdate = new Date()
       } catch (error) {
         console.error('Error loading news:', error)
@@ -185,6 +210,24 @@ export default {
       } finally {
         this.loading = false
       }
+    },
+
+    async fetchNewsText() {
+      const url = `/news.md?ts=${Date.now()}`
+      const response = await fetch(url, {
+        cache: 'no-store',
+        headers: {
+          'Cache-Control': 'no-cache',
+          'Pragma': 'no-cache',
+          'Expires': '0'
+        }
+      })
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`)
+      }
+
+      return response.text()
     },
 
     handlePageChange(page) {
@@ -206,35 +249,104 @@ export default {
         typographer: true
       })
 
-      const newsBlocks = markdownContent.split(/^---$/gm).filter(block => block.trim())
+      const sections = []
       const newsItems = []
+      let currentSection = null
+      let currentItem = null
 
-      for (const block of newsBlocks) {
-        const lines = block.trim().split('\n')
-        let title = ''
-        let content = block.trim()
-
-        // Extract title from first # header
-        for (const line of lines) {
-          if (line.trim().startsWith('# ')) {
-            title = line.trim().substring(2).trim()
-            // Remove title from content
-            content = content.replace(line, '').trim()
-            break
-          }
-        }
-
-        // Convert Markdown to HTML
-        const htmlContent = md.render(content)
-
-        newsItems.push({
-          date: new Date(), // Current date for all news (no sorting)
-          title: title,
-          content: htmlContent
-        })
+      const renderLines = lines => {
+        const content = lines.join('\n').trim()
+        return content ? md.render(content) : ''
       }
 
-      return newsItems // No sorting - news appear in file order
+      const ensureSection = () => {
+        if (!currentSection) {
+          currentSection = {
+            id: `section-${sections.length}`,
+            title: 'Новости',
+            introLines: [],
+            introHtml: '',
+            items: []
+          }
+          sections.push(currentSection)
+        }
+
+        return currentSection
+      }
+
+      const finalizeItem = () => {
+        if (!currentItem) return
+
+        const item = {
+          id: `news-${newsItems.length}`,
+          sectionId: currentSection.id,
+          title: currentItem.title,
+          content: renderLines(currentItem.contentLines)
+        }
+
+        currentSection.items.push(item)
+        newsItems.push(item)
+        currentItem = null
+      }
+
+      const finalizeSectionIntro = section => {
+        if (section && !section.introHtml) {
+          section.introHtml = renderLines(section.introLines)
+        }
+      }
+
+      const lines = markdownContent.split('\n')
+
+      for (const rawLine of lines) {
+        const line = rawLine.replace(/\s+$/, '')
+        const trimmedLine = line.trim()
+
+        if (trimmedLine === '---') {
+          continue
+        }
+
+        const sectionMatch = line.match(/^#\s+(.+)$/)
+        if (sectionMatch) {
+          finalizeItem()
+          finalizeSectionIntro(currentSection)
+
+          currentSection = {
+            id: `section-${sections.length}`,
+            title: sectionMatch[1].trim(),
+            introLines: [],
+            introHtml: '',
+            items: []
+          }
+          sections.push(currentSection)
+          continue
+        }
+
+        const itemMatch = line.match(/^##\s+(.+)$/)
+        if (itemMatch) {
+          const section = ensureSection()
+          finalizeItem()
+          finalizeSectionIntro(section)
+          currentItem = {
+            title: itemMatch[1].trim(),
+            contentLines: []
+          }
+          continue
+        }
+
+        if (currentItem) {
+          currentItem.contentLines.push(line)
+        } else {
+          ensureSection().introLines.push(line)
+        }
+      }
+
+      finalizeItem()
+      finalizeSectionIntro(currentSection)
+
+      return {
+        sections: sections.filter(section => section.introHtml || section.items.length > 0),
+        items: newsItems
+      }
     },
 
     async refreshNews() {
@@ -277,23 +389,21 @@ export default {
         // Проверяем обновления каждые 3 часа
         this.updateInterval = setInterval(async () => {
           try {
-            const response = await fetch('/news.md')
-            if (response.ok) {
-              const text = await response.text()
-              const newsData = this.parseMarkdownNews(text)
+            const text = await this.fetchNewsText()
 
-              // Проверяем, изменилось ли количество новостей
-              if (newsData.length !== this.allNewsItems.length) {
-                this.allNewsItems = newsData
-                this.lastUpdate = new Date()
-                this.$q.notify({
-                  message: 'Появились новые новости!',
-                  color: 'green',
-                  icon: 'newspaper',
-                  position: 'top-right',
-                  timeout: 3000
-                })
-              }
+            if (text !== this.newsSourceText) {
+              const newsData = this.parseMarkdownNews(text)
+              this.newsSections = newsData.sections
+              this.allNewsItems = newsData.items
+              this.newsSourceText = text
+              this.lastUpdate = new Date()
+              this.$q.notify({
+                message: 'Появились новые новости!',
+                color: 'green',
+                icon: 'newspaper',
+                position: 'top-right',
+                timeout: 3000
+              })
             }
           } catch (error) {
             console.error('Error checking for news updates:', error)
@@ -340,10 +450,28 @@ export default {
   max-width: 100%;
 }
 
-.news-card .text-h6 {
+.news-section-title {
+  font-size: 1.5rem;
+  font-weight: 600;
+  line-height: 1.25;
+  margin: 0;
+  color: #324d5b;
+}
+
+.news-item-section {
+  padding-top: 0;
+}
+
+.news-item-section + .news-item-section {
+  border-top: 1px solid #e0e0e0;
+  padding-top: 1rem;
+}
+
+.news-item-title {
   font-size: 1.3rem;
   font-weight: 600;
-  margin-bottom: 0.5rem;
+  line-height: 1.3;
+  margin: 0 0 0.5rem 0;
   color: #324d5b;
 }
 
@@ -352,63 +480,63 @@ export default {
 }
 
 /* Стили для заголовков в контенте новостей */
-.news-card :deep(h1) {
+.news-content :deep(h1) {
   font-size: 1.5rem;
   font-weight: 600;
   margin: 1rem 0 0.5rem 0;
   color: #324d5b;
 }
 
-.news-card :deep(h2) {
+.news-content :deep(h2) {
   font-size: 1.3rem;
   font-weight: 600;
   margin: 1rem 0 0.5rem 0;
   color: #324d5b;
 }
 
-.news-card :deep(h3) {
+.news-content :deep(h3) {
   font-size: 1.2rem;
   font-weight: 600;
   margin: 0.8rem 0 0.4rem 0;
   color: #1976d2;
 }
 
-.news-card :deep(h4) {
+.news-content :deep(h4) {
   font-size: 1.1rem;
   font-weight: 500;
   margin: 0.8rem 0 0.4rem 0;
   color: #424242;
 }
 
-.news-card :deep(h5) {
+.news-content :deep(h5) {
   font-size: 1rem;
   font-weight: 500;
   margin: 0.6rem 0 0.3rem 0;
   color: #616161;
 }
 
-.news-card :deep(h6) {
+.news-content :deep(h6) {
   font-size: 0.95rem;
   font-weight: 500;
   margin: 0.6rem 0 0.3rem 0;
   color: #757575;
 }
 
-.news-card :deep(p) {
+.news-content :deep(p) {
   margin: 0.5rem 0;
   line-height: 1.5;
 }
 
-.news-card :deep(ul), .news-card :deep(ol) {
+.news-content :deep(ul), .news-content :deep(ol) {
   margin: 0.5rem 0;
   padding-left: 1.5rem;
 }
 
-.news-card :deep(li) {
+.news-content :deep(li) {
   margin: 0.25rem 0;
 }
 
-.news-card :deep(blockquote) {
+.news-content :deep(blockquote) {
   border-left: 4px solid #e0e0e0;
   padding-left: 1rem;
   margin: 1rem 0;
@@ -416,7 +544,7 @@ export default {
   font-style: italic;
 }
 
-.news-card :deep(code) {
+.news-content :deep(code) {
   background-color: #f5f5f5;
   padding: 0.2rem 0.4rem;
   border-radius: 3px;
@@ -424,7 +552,7 @@ export default {
   font-size: 0.9em;
 }
 
-.news-card :deep(pre) {
+.news-content :deep(pre) {
   background-color: #f5f5f5;
   padding: 1rem;
   border-radius: 4px;
@@ -432,50 +560,54 @@ export default {
   margin: 1rem 0;
 }
 
-.news-card :deep(pre code) {
+.news-content :deep(pre code) {
   background-color: transparent;
   padding: 0;
 }
 
-.news-card :deep(table) {
+.news-content :deep(table) {
   border-collapse: collapse;
   width: 100%;
   margin: 1rem 0;
 }
 
-.news-card :deep(th), .news-card :deep(td) {
+.news-content :deep(th), .news-content :deep(td) {
   border: 1px solid #ddd;
   padding: 0.5rem;
   text-align: left;
 }
 
-.news-card :deep(th) {
+.news-content :deep(th) {
   background-color: #f5f5f5;
   font-weight: 600;
 }
 
 @media (max-width: 599px) {
-  .news-card .text-h6 {
-    font-size: 1rem;
+  .news-section-title {
+    font-size: 1.3rem;
+  }
+
+  .news-item-title {
+    font-size: 1.2rem;
   }
 
   .news-card .text-subtitle2 {
     font-size: 0.8rem;
   }
 
-  .news-card :deep(h1) {
+  .news-content :deep(h1) {
     font-size: 1.3rem;
   }
 
-  .news-card :deep(h2) {
+  .news-content :deep(h2) {
     font-size: 1.2rem;
   }
 
-  .news-card :deep(h3) {
+  .news-content :deep(h3) {
     font-size: 1.1rem;
   }
 
-  .news-card :deep(h4) {
+  .news-content :deep(h4) {
     font-size: 1rem;
   }
 }

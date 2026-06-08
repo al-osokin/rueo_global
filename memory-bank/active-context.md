@@ -2,6 +2,59 @@
 
 Updated: 2026-06-06 04:29 (Europe/Moscow)
 
+## 2026-06-08 — PWA news refresh cache fix deployed
+
+Sasha reported that an updated root `news.md` on prod did not appear in the PWA after manual refresh, forced reload, or browser cache clearing.
+
+Findings:
+- Live `https://rueo.ru/news.md` was already fresh on the server (`Last-Modified: 2026-06-08 00:22:48 GMT`, size 8761), so the stale display was frontend/PWA-cache behavior, not a missing upload.
+- `NewsFeed.vue` fetched `/news.md` without cache-busting/no-cache headers.
+- Auto-update only treated a changed number of news blocks as an update; edits inside existing blocks were ignored.
+- `.htaccess` disabled cache only for `service-worker.js`, but the Quasar PWA build outputs and deploy script use `sw.js`.
+
+Local fix applied in both `rueo_master` and `rueo_global`:
+- `NewsFeed.vue`: fetch `/news.md?ts=...` with `cache: 'no-store'`, store the raw source text, and update when text changes.
+- `custom-service-worker.js`: exclude `news.md` from precache and serve `/news.md` network-only.
+- `public/.htaccess`: no-cache headers for both `sw.js`/`service-worker.js` and `news.md`.
+- frontend version bumped locally to `1.0.7` in both trees so deployed PWA clients can detect the code update via `/package.json`.
+
+Verification before deploy:
+- `npm --prefix frontend-app run build -- -m pwa` passed in `rueo_master`.
+- Same build passed in `rueo_global`.
+
+Prod deploy:
+- Sasha approved deploy on 2026-06-08 around 03:50 MSK.
+- `scripts/deploy_frontend_pwa.sh --apply` initially built `1.0.7` but stopped before rsync because public `rueo.ru` now points to emergency proxy and SSH host key differs.
+- Re-ran deploy against origin explicitly: `SERVER_SSH=root@72.56.13.203 ./scripts/deploy_frontend_pwa.sh --apply --skip-build`.
+- Deployed package verification printed `1.0.7`.
+- Live checks through public `https://rueo.ru/` and direct origin `--resolve rueo.ru:443:72.56.13.203`:
+  - `/package.json` returns `1.0.7`;
+  - `/sw.js` contains `v1.0.7` and the `/news.md` handling;
+  - `/package.json`, `/sw.js`, and `/news.md` all return `Cache-Control: no-cache, no-store, must-revalidate`, `Pragma: no-cache`, `Expires: 0`.
+
+Server-side note:
+- `.htaccess` was fixed in the repo, but live origin is Nginx and did not apply those headers.
+- Added matching live Nginx locations in `/etc/nginx/vhosts/slovari/rueo.ru.conf` for `/package.json`, `/news.md`, and `~ ^/(sw|service-worker)\.js$`; `nginx -t` passed and Nginx was reloaded.
+- Backup on origin: `/etc/nginx/vhosts/slovari/rueo.ru.conf.bak-20260608-035303-pwa-cache`.
+
+No commit has been made yet. Per Sasha's rule, wait for local review/confirmation before committing; if committing, include these code/version changes in both worktrees and this handoff note.
+
+Follow-up local fix on 2026-06-08:
+- Sasha noticed that the first `#` heading in a `news.md` block rendered smaller than later `#` headings: DOM showed `ПЕРЕПИСКА` as `div.text-h6`, while `ВАЖНЫЕ НОВОСТИ` stayed a Markdown `<h1>`.
+- Root cause: `NewsFeed.vue` extracts the first `# ...` heading from each `---` block into `item.title`, removes it from Markdown content, then renders it as Quasar `div.text-h6`.
+- Local fix applied in both `rueo_master` and `rueo_global`: render extracted news titles as semantic `<h1 class="news-card-title">` with the same size as Markdown `h1`; only keep tighter zero top margin for card layout.
+- Frontend version bumped locally to `1.0.8` in both trees (`package.json`, `package-lock.json`, `public/package.json`) so a later PWA deploy signals an app update.
+- Verification: `npm --prefix frontend-app run build -- -m pwa` passed in both `rueo_master` and `rueo_global`.
+
+News structure follow-up on 2026-06-08:
+- Sasha restructured the local shared `news.md` to use `#` headings as top-level sections (`ПЕРЕПИСКА`, `ВАЖНЫЕ НОВОСТИ`, `НАША ПОЧТИ БЕГУЩАЯ СТРОКА`) and `##` headings as individual news items. `---` separators were removed from the file and are no longer needed.
+- `frontend-app/public/news.md` is an absolute symlink to `/home/avo/.rueo-shared/news.md` and is explicitly ignored by `.gitignore`, while `/home/avo/.rueo-shared` is not a Git repository. Therefore Sasha's content edit cannot be pushed by the code commit and must be deployed/synced through the shared-news path separately.
+- `NewsFeed.vue` parser was changed from `---` blocks to a two-level model: `#` sections + `##` news items. Pagination and homepage limits count only `##` items; section intro text such as `ПЕРЕПИСКА` is shown outside the item count.
+- Rendering now groups visible news items back under their section headings, so `#` headings are shown once per visible section and `##` headings are not duplicated.
+- Homepage limit remains 5 news items; `/novajxoj` still paginates 10/20/50 items.
+- Verification after parser change: `npm --prefix frontend-app run build -- -m pwa` passed in both `rueo_master` and `rueo_global`.
+- Not deployed yet.
+
 ## Where we are
 - Рабочий проект: `~/rueo_master` (prod / Stage I + dictionary update pipeline).
 - Primary task contour for rueo work is now YouTrack project `eoru` / **Словари**.
