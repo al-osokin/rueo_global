@@ -98,6 +98,13 @@ Prod deploy was done from `rueo_master` only after Sasha approved:
 
 No commit has been made. Existing unrelated dirty Stage II files remain: `frontend-app/src/pages/AdminV4Review.vue`, `.learnings/`, `backend/.env.lmstudio`.
 
+## 2026-06-08 — deployment default and PWA version note
+
+Ported prod deployment defaults from `rueo_master`:
+- While the Timeweb network path is unreliable and public `rueo.ru` lives behind the emergency proxy, `scripts/deploy_frontend_pwa.sh` and `scripts/rueo_update.sh` default to `SERVER_SSH=root@72.56.13.203`.
+- Added `memory-bank/FRONTEND_DEPLOYMENT.md` with the current deploy channel and PWA version-bump rules.
+- Important version rule: use `frontend-app/bump-version.sh <version>`; the version is not only in `package.json`, it must also be synchronized to `package-lock.json`, `public/package.json`, and `src-pwa/custom-service-worker.js` (`CACHE_VERSION`).
+
 Follow-up local fix on 2026-06-08:
 - Sasha noticed in prod that the first `#` heading in a `news.md` block rendered smaller than later `#` headings.
 - Root cause was the same in Stage II: `NewsFeed.vue` extracts the first `# ...` into `item.title`, removes it from Markdown, and rendered it as `div.text-h6`.

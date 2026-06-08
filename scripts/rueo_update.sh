@@ -18,7 +18,9 @@ DROPBOX_ROOT_DEFAULT="/mnt/f/Backup/Dropbox"
 DROPBOX_VORTARO_RE_DEFAULT="${DROPBOX_ROOT_DEFAULT}/VortaroRE-daily"
 DROPBOX_VORTARO_ER_DEFAULT="${DROPBOX_ROOT_DEFAULT}/VortaroER-daily"
 
-SERVER_SSH_DEFAULT="root@rueo.ru"
+# While public rueo.ru is routed through the emergency proxy, deploy/update the
+# Timeweb origin IP directly. Override SERVER_SSH when normal routing is back.
+SERVER_SSH_DEFAULT="root@72.56.13.203"
 SERVER_TEKSTOJ_DIR_DEFAULT="/var/www/slovari/data/www/rueo.ru/backend/data/tekstoj"
 
 LOCAL_PG_CONTAINER_DEFAULT="rueo_postgres"
