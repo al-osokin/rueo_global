@@ -1,6 +1,28 @@
 # Active Context — rueo.ru / YouTrack cleanup
 
-Updated: 2026-06-06 04:29 (Europe/Moscow)
+Updated: 2026-06-10 16:36 (Europe/Moscow)
+
+## 2026-06-09 — legacy Rueo names on emergency channel
+
+Sasha reported that some users still reach the dictionary through `eoru.ru`, and some use `old.rueo.ru`.
+
+Configured on `stage-test` (`37.46.132.178`) through the existing emergency tunnel:
+- New nginx config: `/etc/nginx/conf.d/rueo-extra-tunnel-proxy.conf`.
+- `old.rueo.ru` / `www.old.rueo.ru` HTTP redirects to HTTPS; HTTPS proxies through `https://127.0.0.1:18443` with `proxy_ssl_name old.rueo.ru`.
+- Copied origin certificate to `/var/www/httpd-cert/tunnel-proxy/rueo-extra/old.rueo.ru_le2.{crtca,key}`; cert is valid until `2026-08-06`. It covers only `old.rueo.ru`, not `www.old.rueo.ru`, matching the origin certificate state.
+- `eoru.ru` / `www.eoru.ru` HTTP and HTTPS redirect to `https://rueo.ru$request_uri`; ACME webroot prepared at `/var/www/acme-eoru/.well-known/acme-challenge/`.
+- `eoru.ru` had no valid HTTPS cert on origin: current origin HTTPS presents the default `a-v-o.ru` certificate. Attempted Let's Encrypt HTTP-01 issue on origin failed because LE could not fetch validation data from `72.56.13.203`, consistent with the Timeweb path incident.
+- After Sasha moved DNS toward `37.46.132.178`, issued a new stage-test Let's Encrypt ECDSA cert for `eoru.ru` + `www.eoru.ru`, installed at `/var/www/httpd-cert/tunnel-proxy/rueo-extra/eoru.ru.{crtca,key}`; valid until `2026-09-07`.
+
+Verification with forced resolve to `37.46.132.178`:
+- `http://eoru.ru/` -> `301 https://rueo.ru/`.
+- `http://www.eoru.ru/test?q=1` -> `301 https://rueo.ru/test?q=1`.
+- `https://eoru.ru/test?q=1` -> `301 https://rueo.ru/test?q=1`.
+- `https://www.eoru.ru/` -> `301 https://rueo.ru/`.
+- `http://old.rueo.ru/` -> `301 https://old.rueo.ru/`.
+- `https://old.rueo.ru/` -> `200` through the tunnel.
+
+DNS transition at 2026-06-09 15:32 MSK: `1.1.1.1` and `9.9.9.9` already saw `eoru.ru -> 37.46.132.178`; Google `8.8.8.8` still briefly returned old `72.56.13.203` for apex. `old.rueo.ru` was already updated on checked public resolvers; `www` names are CNAMEs and should follow.
 
 ## 2026-06-08 — PWA news refresh cache fix deployed
 
@@ -240,3 +262,82 @@ Commit/sync reminder from Sasha after this update:
 - Keep `rueo_master` commits cautious because `rueo_global` contains Stage II development.
 - Changes made in `rueo_master` should also land in `rueo_global` when applicable, so Stage II does not lose prod fixes/content updates.
 - `frontend-app/public/mecenatoj.txt` was ported to `rueo_global`; broader code audit is planned in `memory-bank/MASTER_GLOBAL_SYNC_AUDIT.md`.
+
+## 2026-06-10 — prod dictionary update to `призёр`
+
+Dictionary update completed on prod to last Russian word `призёр`.
+
+Pipeline run:
+- Dropbox sync-in -> local import -> sync-back -> local DB dump -> restore server DB -> deploy `tekstoj`.
+- Full command: `./scripts/rueo_update.sh run --last-ru-letter 'призёр'`.
+- Dump kept at: `/home/avo/rueo_master/tmp/rueo_db_20260610T133357Z.dump` (14M PostgreSQL custom dump).
+
+Counts after import/local DB:
+- Esperanto articles: 46642
+- Russian articles: 58757
+- EO search: 93435
+- RU search: 90363
+- fuzzy: 838
+
+Prod verification:
+- `https://rueo.ru/` HTTP 200.
+- `/search?query=призёр` returned `count: 1`, article shows редакция `2026-06-09`.
+- `renovigxo.md` starts `10 июня 2026 года`.
+- `klarigo.md` says Russian dictionary range `А — призёр` and EO stats `93435 слов в 46642 словарных статьях`.
+
+## 2026-06-10 — old.rueo.ru legacy updater copied locally for study
+
+Sasha asked about reviving updates for old.rueo.ru. Existing manual workflow: copy dictionary sources to the server, open the updater UI on port `12443`, run the old Python/Tornado updater there.
+
+Server source inspected at `/var/www/slovari/data/www/updater.rueo.ru` on origin `72.56.13.203`:
+- Live service: `vortaro_updater.service`, process `env311/bin/python updater_src/web.py -c vu.yml`, user `slovari`.
+- Port `12443` listens on `0.0.0.0` and `::`.
+- Main code is under `updater_src/`; top-level `src/` contains server-side dictionary source snapshot and `last-ru-letter.txt`.
+- `vu.yml` contains production DB/UI credentials; treat the local copy as sensitive and do not commit it.
+- Server `src/last-ru-letter.txt` currently says `президентша`, so the old contour is behind the new prod update pipeline.
+- The old updater is a Tornado web UI that calls PHP importer `vortaro_updater.php` or `vortaro_updater_8.php`, first against test MySQL DB, then backs up production MySQL with `mysqldump`, imports production DB, updates `old.rueo.ru/tekstoj/klarigo.textile` and prepends date to `renovigxo.textile`; rollback uses `mysql < backup`.
+
+Local action:
+- Existing local `/home/avo/updater.rueo.ru` was preserved as `/home/avo/updater.rueo.ru.backup-20260610-195936`.
+- Fresh server copy was rsynced to `/home/avo/updater.rueo.ru`, excluding top-level `env/`, `env311/`, and `__pycache__/`.
+- Copied payload includes `updater_src/` with its Git history, `src/`, `vu.yml`, `vu.log`, `index.html`, and helper files.
+
+Likely direction:
+- Short-term diagnostic bridge can proxy `12443` through stage-test, but only with tight access controls.
+- Better durable path: add an old.rueo.ru legacy MySQL build/restore step to the same dictionary update pipeline, using this copied updater code as reference and avoiding the browser UI.
+
+Follow-up implementation started the same evening:
+- `scripts/rueo_update.sh` now has a separate old.rueo.ru contour; the existing `run` command is intentionally unchanged.
+- New commands:
+  - `sync-old-src --last-ru-letter <word>`: rsync current `backend/data/src/{VortaroRE-daily,VortaroER-daily}` to `${OLD_UPDATER_DIR}/src` on `${OLD_UPDATER_SSH}` and writes `last-ru-letter.txt` in CP1251.
+  - `update-old-db --last-ru-letter <word>`: over SSH, runs the legacy PHP 8 importer first on `slovari_vortaro_test`, then backs up `slovari_vortaro` with `mysqldump`, imports production MySQL, and regenerates old `klarigo.textile` / `renovigxo.textile` from the prod import log.
+  - `run-old --last-ru-letter <word>`: sync + old DB update.
+  - `run-all --last-ru-letter <word>`: existing new-site full pipeline, then `run-old`.
+- Defaults point to origin `root@72.56.13.203`, updater dir `/var/www/slovari/data/www/updater.rueo.ru`, DBs `slovari_vortaro` and `slovari_vortaro_test`.
+- Verification so far: `bash -n scripts/rueo_update.sh` passes; help output shows the new commands; read-only remote prerequisite check passed (`/usr/bin/php` is PHP 8.2, `env311/bin/python` can read `vu.yml`, config paths match).
+- Not yet run against old production DB from this new CLI path. Sasha is doing the immediate manual update through `72.56.13.203:12443`; use that result as a comparison before trusting the new command for routine updates.
+- The new CLI path does not need the always-on Python/Tornado web UI on port `12443`. It only needs the updater directory, `src/`, `vu.yml`, `/usr/bin/php`, MySQL tools, and `env311/bin/python` as a command-line interpreter for small YAML/text-generation helpers. It is therefore OK to stop/disable `vortaro_updater.service` when the browser UI is no longer needed.
+
+Local old.rueo.ru development path added and tested:
+- `scripts/rueo_update.sh update-old-local-db --last-ru-letter <word>` imports current `backend/data/src` into local MySQL `slovari_vortaro` without SSH/production access, then regenerates local `/home/avo/old.rueo.ru/tekstoj/klarigo.textile` and `renovigxo.textile`.
+- Local DB connection is controlled by env vars: `OLD_LOCAL_DB_HOST`, `OLD_LOCAL_DB`, `OLD_LOCAL_DB_USER`, `OLD_LOCAL_DB_PASSWORD`. Sasha updated `/home/avo/old.rueo.ru/index.php` to use local credentials; do not write those credentials into the repo or handoff.
+- `/home/avo/updater.rueo.ru/updater_src/vortaro_updater_8.php` was locally patched to accept `OLD_RUEO_MYSQL_HOST`, `OLD_RUEO_MYSQL_USER`, and `OLD_RUEO_MYSQL_PASSWORD`, so the script does not need hardcoded local credentials.
+- First local run with the active credentials from `index.php` completed on 2026-06-10:
+  `./scripts/rueo_update.sh update-old-local-db --last-ru-letter 'призёр'`
+  with log `/home/avo/rueo_master/tmp/old_rueo_local_import_20260610T173133Z.log`.
+- Local legacy counts after import: `artikoloj` 46642, `artikoloj_ru` 58757, `sercxo` 93454, `sercxo_ru` 90365, `neklaraj` 838.
+- MySQL check found `призёр` in `sercxo_ru`, linked to article `32170`; article text begins `[призёр] (_лицо, получившее приз_) premiito; ...`.
+- Local `klarigo.textile` now says range `А -- призёр`, EO `93454 слова в 46642 словарных статьях`; `renovigxo.textile` starts `10 июня 2026 года`.
+- Important legacy preservation rule: `statistiko` is a live old-site usage/search statistics table and must not be overwritten by any future MySQL dump/restore flow. The legacy PHP importer is safe here: it truncates only `artikoloj`, `artikoloj_ru`, `sercxo`, `sercxo_ru`, and `neklaraj`; it does not touch `statistiko`. If a local MySQL dump is later deployed to origin/stage instead of running the PHP importer in place, dump/restore only those five dictionary tables (plus explicitly intended helper tables), or preserve and restore `statistiko` around the import.
+- Sasha stopped `vortaro_updater.service`; the CLI path does not require the web UI. Verified afterward: service is `inactive` and port `12443` is not listening.
+- First production CLI attempt exposed two fixups:
+  - the remote `updater_src/vortaro_updater_8.php` did not yet support `OLD_RUEO_MYSQL_*`, so it was backed up as `updater_src/vortaro_updater_8.php.bak-20260610T174536Z` and replaced with the local env-aware version;
+  - the server-side log parser was updated to understand both bracket stats and the PHP 8 daily log format (`Processing language`, `Dictionary entries processed`, `Words processed`).
+- Final production old.rueo.ru CLI update completed on origin with:
+  `./scripts/rueo_update.sh update-old-db --last-ru-letter 'призёр'`.
+  Backup: `/root/old_rueo_vortaro_20260610T174718Z.sql` (52M).
+  Logs: `/var/www/slovari/data/www/updater.rueo.ru/logs/old-rueo-test-20260610T174718Z.log` and `old-rueo-prod-20260610T174718Z.log`.
+- Origin MySQL verification after final run: `artikoloj` 46642, `artikoloj_ru` 58757, `sercxo` 93454, `sercxo_ru` 90365, `neklaraj` 838, `statistiko` 263252, and `sercxo_ru` has one `призёр` entry linked to article `32170`.
+- Origin old-site texts now say range `А -- призёр`; `renovigxo.textile` starts `10 июня 2026 года`.
+- HTTP verification passed for forced origin and proxy routes:
+  `https://old.rueo.ru/sercxo/призёр` returned content containing both `призёр` and `premiito` via `72.56.13.203` and via `37.46.132.178`.
