@@ -120,3 +120,23 @@ News structure follow-up on 2026-06-08:
 - Homepage limit remains 5 news items; `/novajxoj` still paginates 10/20/50 items.
 - Verification: `npm --prefix frontend-app run build -- -m pwa` passed.
 - Not deployed.
+
+## 2026-06-10 — old.rueo.ru update contour ported from prod
+
+Ported the `rueo_master` legacy old.rueo.ru update contour to Stage II's `scripts/rueo_update.sh` so future Stage II work does not lose the prod dictionary update workflow.
+
+The normal new-site dictionary update still uses:
+`./scripts/rueo_update.sh run --last-ru-letter <word>`.
+
+The old-site update remains a separate follow-up command:
+`./scripts/rueo_update.sh run-old --last-ru-letter <word>`.
+
+Order matters: run the new-site update first, then `run-old`, because the new-site pipeline syncs the dated local dictionary sources back before the old-site importer rsyncs them to `/var/www/slovari/data/www/updater.rueo.ru/src/`.
+
+Legacy notes from the prod validation:
+- `vortaro_updater.service` / port `12443` is not required for the CLI path and can remain stopped.
+- `run-old` imports on origin through the legacy PHP importer, first into `slovari_vortaro_test`, then into `slovari_vortaro` after a MySQL backup.
+- The live old-site `statistiko` table must be preserved. The PHP importer truncates only `artikoloj`, `artikoloj_ru`, `sercxo`, `sercxo_ru`, and `neklaraj`; do not replace this path with a full-database restore.
+
+Verification:
+- `bash -n scripts/rueo_update.sh` passed in `rueo_global`.
