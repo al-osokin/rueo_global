@@ -3,7 +3,7 @@ import re
 import smtplib
 from datetime import datetime
 from email.message import EmailMessage
-from email.utils import formataddr
+from email.utils import formataddr, formatdate, make_msgid
 from pathlib import Path
 from typing import Annotated
 from urllib.parse import unquote
@@ -144,6 +144,8 @@ def _send_orph_email(subject: str, body: str) -> None:
     msg["From"] = formataddr((from_name, from_addr)) if from_name else from_addr
     msg["To"] = SMTP_SETTINGS["to_addr"]
     msg["Subject"] = subject
+    msg["Date"] = formatdate(localtime=True)
+    msg["Message-ID"] = make_msgid(domain="rueo.ru")
     msg.set_content(body, charset="utf-8")
 
     try:

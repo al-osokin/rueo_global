@@ -1,6 +1,34 @@
 # Active Context — rueo.ru / YouTrack cleanup
 
-Updated: 2026-06-10 16:36 (Europe/Moscow)
+Updated: 2026-06-27 19:35 (Europe/Moscow)
+
+## 2026-06-27 — rueo.ru `/orph` mail route and Date header hotfix
+
+Production `rueo.ru` on FirstVDS Stage had two mail issues in the backend `/orph` feedback path.
+
+Delivery fix:
+- Sasha's test `/orph` message did not arrive.
+- Diagnosis on server: `rueo-backend-1` sends via `smtplib` to host Exim at `SMTP_HOST=172.18.0.1`, `SMTP_PORT=587`, with empty SMTP auth and `SMTP_FROM/SMTP_TO=vortaristo@a-v-o.ru`.
+- Exim saw the backend as unauthenticated Docker client `172.18.0.2` and rejected sender domain `a-v-o.ru` at RCPT with `Unauthorized access`.
+- Server backup: `/root/exim-hardening-backups/20260627-1914-rueo-docker-relay/`.
+- Added the private `rueo_default` Docker subnet `172.18.0.0/16` to `/etc/exim4/relay_from_hosts` and reloaded Exim.
+- Verified direct SMTP from `rueo-backend-1`: message `1wdVgH-0005Zu-0X` accepted and delivered to `vortaristo@a-v-o.ru`.
+- Verified real `/orph`: message `1wdVga-0005cL-2x` accepted and delivered via `R=procmail T=dovecot_deliver_pipe`.
+
+Date header fix:
+- The backend-generated message had no `Date:` header; The Bat! displayed it as `30 Dec 1899 03:00`.
+- Local source fix in `backend/app/main.py`: import `formatdate` and `make_msgid`; add `Date` and `Message-ID` headers before `set_content()`.
+- Hotfixed running container by copying the updated `main.py` into `rueo-backend-1`; backup: `/root/rueo-backend-hotfix-backups/20260627-1933-mail-date-messageid/`.
+- Restarted `rueo-backend-1`; `python -m py_compile /app/app/main.py` passed.
+- Test `/orph` after hotfix delivered Exim id `1wdVya-0006h8-1L`; stored message contains:
+  - `Date: Sat, 27 Jun 2026 16:33:51 +0000`
+  - `Message-ID: <178257803195.1.18446384458891057777@rueo.ru>`
+- Committed the patched running container back to local Docker image `alosokin/rueo-backend:latest` so a local container recreation uses the fix. Image changed from `sha256:52933138...` to `sha256:1ade7723...`.
+- Checked `exim4`, `dovecot`, `docker` active and `rueo-backend-1` up.
+
+Git state:
+- Sasha confirmed the fixed message arrives with a normal date in The Bat! and explicitly approved making a commit.
+- Commit should include `backend/app/main.py` and `memory-bank/active-context.md`.
 
 ## 2026-06-09 — legacy Rueo names on emergency channel
 
@@ -341,3 +369,36 @@ Local old.rueo.ru development path added and tested:
 - Origin old-site texts now say range `А -- призёр`; `renovigxo.textile` starts `10 июня 2026 года`.
 - HTTP verification passed for forced origin and proxy routes:
   `https://old.rueo.ru/sercxo/призёр` returned content containing both `призёр` and `premiito` via `72.56.13.203` and via `37.46.132.178`.
+
+## 2026-06-16 — prod dictionary update to `призмообразный`
+
+Dictionary update completed on prod to last Russian word `призмообразный`, including the new old.rueo.ru legacy contour.
+
+Pipeline run:
+- New rueo.ru command: `./scripts/rueo_update.sh run --last-ru-letter 'призмообразный'`.
+- Old rueo.ru command after successful new-site run: `./scripts/rueo_update.sh run-old --last-ru-letter 'призмообразный'`.
+- New-site PostgreSQL dump kept at: `/home/avo/rueo_master/tmp/rueo_db_20260615T212352Z.dump`.
+
+Counts after new-site import/local DB:
+- Esperanto articles: 46643
+- Russian articles: 58756
+- EO search: 93439
+- RU search: 90377
+- fuzzy: 838
+
+Tracking summary:
+- EO: `articles_changed` 5, `articles_auto_dated` 2, `articles_new` 3.
+- RU: `articles_changed` 23, `articles_auto_dated` 21, `articles_new` 6.
+
+New prod verification:
+- `https://rueo.ru/search?query=призмообразный` returned HTTP 200 with `count: 1`.
+- `renovigxo.md` starts `16 июня 2026 года`.
+
+old.rueo.ru legacy update:
+- Backup: `/root/old_rueo_vortaro_20260615T212418Z.sql`.
+- Test log: `/var/www/slovari/data/www/updater.rueo.ru/logs/old-rueo-test-20260615T212418Z.log`.
+- Prod log: `/var/www/slovari/data/www/updater.rueo.ru/logs/old-rueo-prod-20260615T212418Z.log`.
+- Origin MySQL table counts after run: `artikoloj` 46643, `artikoloj_ru` 58756, `sercxo` 93458, `sercxo_ru` 90379, `neklaraj` 838, `statistiko` 264644.
+- `statistiko` was not truncated by the importer and remains populated.
+- HTTP verification passed: `https://old.rueo.ru/sercxo/призмообразный` returned HTTP 200 with a dictionary article, permanent link, and revision marker.
+- Caveat: a manually constructed CP1251-percent URL for the same word triggered old `sercxo.php` memory exhaustion; normal UTF-8 URL verification passed.
