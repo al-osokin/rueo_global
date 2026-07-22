@@ -2,19 +2,19 @@
 
 ## Current SSH target
 
-While the normal Timeweb network path is unreliable and public `rueo.ru` is served through the emergency proxy, deploy to the origin IP directly:
+Production `rueo.ru` is now served from the FirstVDS Stage host. The deploy/update scripts use the local SSH alias by default:
 
 ```bash
 ./scripts/deploy_frontend_pwa.sh --apply
 ```
 
-The deploy/update scripts currently default to:
+Current default:
 
 ```bash
-SERVER_SSH=root@72.56.13.203
+SERVER_SSH=firstvds-stage
 ```
 
-When the normal network path is fixed, revisit `SERVER_SSH_DEFAULT` in:
+If the SSH alias changes, revisit `SERVER_SSH_DEFAULT` in:
 
 - `scripts/deploy_frontend_pwa.sh`
 - `scripts/rueo_update.sh`

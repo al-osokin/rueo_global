@@ -1,6 +1,341 @@
 # Active Context — rueo.ru / YouTrack cleanup
 
-Updated: 2026-06-27 19:35 (Europe/Moscow)
+Updated: 2026-07-23 02:08 (Europe/Moscow)
+
+## 2026-07-23 — real Reformal duplicate-link mail handled
+
+- UID `1147`, the reply to feedback `ia=1220746` / «Заумь», exposed two
+  real-template cases that the strict parser had classified as
+  `missing_reformal_ia`: the same exact `ia` project URL appeared twice, and
+  ordinary Reformal project-home URLs without an `ia` appeared beside it.
+- Updated `/home/avo/clawd/research/youtrack/rueo_mail_ingest.py` to accept
+  repeated occurrences only when every extracted numeric `ia` is identical,
+  continue rejecting duplicate query parameters and conflicting/invalid
+  values, and ignore supported project-home links that contain no `ia`.
+- Added reply-title extraction from the exact linked feedback anchor (with a
+  doubled-quote subject fallback). Root lookup now searches by `ia` and the
+  feedback-title hint, then still requires the candidate description to
+  contain the exact supported URL and unique root-feedback evidence.
+- Expanded the mock-only suite from 19 to 22 tests; `py_compile` and all 22
+  tests pass. A live read-only preview resolved exactly one mutable message:
+  UID `1147` -> comment on legacy root `eoru-1170`; the other 49 messages were
+  `skip_seen`.
+- Applied the targeted inbox batch after Sasha's approval. YouTrack created
+  comment `4-439` on `eoru-1170`; readback confirms the full reply and durable
+  message marker. Local state stores `ia=1220746 -> eoru-1170`, and a rerun is
+  now `skip_seen`. The issue remained `Fixed`; no standalone RUEO issue or
+  duplicate was created.
+- Implementation code, tests, and task artifacts were committed in the
+  OpenClaw workspace as `2a863c6` (`Harden Rueo Reformal mail threading`). No
+  database command, cron mutation/run, deploy, or Gateway restart was
+  performed.
+
+Updated: 2026-07-22 01:16 (Europe/Moscow)
+
+## 2026-07-22 — eight technical eoru duplicates deleted after approval
+
+- Sasha explicitly approved deletion in Telegram confirmation topic message
+  `21965`.
+- Saved a full pre-delete JSON snapshot for `eoru-1454` through `eoru-1461`
+  and the preserved canonical issues `RUEO-44` through `RUEO-51` at
+  `/home/avo/clawd/backups/youtrack/eoru-technical-duplicates-20260722T011542/`.
+- Deleted exactly `eoru-1454`, `eoru-1455`, `eoru-1456`, `eoru-1457`,
+  `eoru-1458`, `eoru-1459`, `eoru-1460`, and `eoru-1461`.
+- Post-delete readback returned HTTP 404 for all eight deleted issues and HTTP
+  200 for every canonical `RUEO-44` through `RUEO-51`; canonical issues were
+  not changed. No commit, deploy, database operation, or Gateway restart was
+  performed.
+
+## 2026-07-22 — eoru-1462 pagination hardening completed
+
+- Implemented bounded exhaustive YouTrack issue search and per-candidate
+  comment pagination in `/home/avo/clawd/research/youtrack/rueo_mail_ingest.py`.
+  Completion now requires an empty terminal page; malformed, repeated, failed,
+  conflicting, or bound-exhausted pagination fails closed into the existing
+  retryable manual-review path before mutation.
+- Preserved strict supported legacy/current Reformal URL parsing and exact `ia`
+  filtering; message-marker matching now also rejects longer-token prefix
+  matches and markers adjacent to Cyrillic/other Unicode word characters.
+  Embedded issue comment subsets are no longer trusted. Malformed comment ids
+  or text (including null/non-string text) now fail the idempotency lookup into
+  retryable `manual_review` before any create/comment mutation.
+- Expanded the fake/request-only suite from 11 to 19 tests: multi-page issues,
+  multi-page comments, legacy `.ru` fallback, exact marker filtering,
+  duplicate/ambiguous candidates, failed/malformed/repeated pagination, and
+  bound exhaustion, plus malformed comment identity/text no-mutation and
+  Unicode-boundary regressions. `py_compile` and all 19 tests pass.
+- Implementation artifact:
+  `/home/avo/clawd/memory-bank/tasks/2026-07-22-eoru-1462-pagination-hardening.md`.
+  The first review's two major findings were corrected. A fresh final
+  independent re-review passed with no critical, major, or minor findings;
+  `py_compile`, all 19 mock-only tests, and 4 independent edge probes passed.
+- Workboard card `4f5e6667-228f-4228-b8e8-f9d42ff725a6` is `done`; YouTrack
+  `eoru-1462` is `Fixed` with `resolved=1784672423588`. The routed completion
+  report receipt is Telegram message `21968`; the first-review failure receipt
+  is message `21960`.
+- No additional substantial follow-up was identified. No network, live
+  importer, historical YouTrack mutation, database, cron run, commit, deploy,
+  or production action was performed.
+
+## 2026-07-22 — approved eoru-1426 follow-up package applied
+
+- Sasha approved the exact package in Telegram confirmation topic message
+  `21953` and explicitly declined a separate Stardict/licensing product task.
+- Rewrote `eoru-1462` to require stable Reformal `ia`, supported legacy/current
+  URL fallback, exhaustive bounded issue and comment pagination, fail-closed
+  handling, and mock-only pagination/ambiguity/failure tests. Readback confirms
+  `State=In Progress`, unresolved, with `dev-board`; it is dispatcher-eligible.
+- Rewrote `eoru-1463` as minimal deduplication only. Pre-mutation readback
+  showed open RUEO-11 and terminal Verified eoru-1232 with no duplicate link.
+  Applied exactly one `RUEO-11 duplicates eoru-1232` link, read it back, then
+  closed RUEO-11 as `Duplicate` (`resolved=1784670588872`). No text/comment was
+  copied into eoru-515 and nothing was deleted. Follow-up eoru-1463 is `Fixed`
+  (`resolved=1784670606022`).
+- Rewrote `eoru-1464` as minimal deduplication only. Pre-mutation readback
+  showed open RUEO-12 and terminal Won't fix eoru-1233 with no duplicate link.
+  Applied exactly one `RUEO-12 duplicates eoru-1233` link, read it back, then
+  closed RUEO-12 as `Duplicate` (`resolved=1784670589358`). No absent root was
+  searched for or created and nothing was deleted. Follow-up eoru-1464 is
+  `Fixed` (`resolved=1784670606166`).
+- The first braced state-command attempts for eoru-1462 failed HTTP 400 without
+  state mutation; the accepted YouTrack command syntax was `State In Progress`.
+  `dev-board` applied successfully and final readback converged. No code,
+  database, commit, deploy, cron, production, or Gateway change occurred.
+
+Updated: 2026-07-22 01:58 (Europe/Moscow)
+
+## 2026-07-22 — meaning of long-lived eoru dictionary tails
+
+- The Russian–Esperanto dictionary is authored sequentially by Russian
+  alphabet. At each dictionary refresh Sasha supplies the last completed
+  Russian headword; material after that boundary is explicitly draft even
+  though readers often report its missing words/translations as defects.
+- Do not treat every old `eoru` issue in `In Progress` as forgotten executable
+  work. The historical backlog mixes: noise about not-yet-completed articles;
+  useful headword/translation proposals worth considering early; and genuine
+  lexicographic questions for which the author has not supplied an answer.
+- A report only stating that a post-boundary draft article is incomplete can
+  normally be closed with an explanatory comment. A concrete useful lexical
+  proposal may remain for review even before its article is complete. Questions
+  awaiting the author must stay human-owned and must not be auto-resolved or
+  dispatched as implementation work.
+- `eoru-963` is reserved for Sasha to discuss with the author on 2026-07-22.
+  `eoru-532` and `eoru-681` are examples of unresolved author-dependent lexical
+  questions. Sasha confirmed `eoru-865`, `eoru-835`, `eoru-822`, `eoru-806`,
+  `eoru-743`, `eoru-610`, and `eoru-536` are already done and closed them in
+  YouTrack.
+- Prefer `In Progress` only for genuinely active work. Long-term author review
+  should remain visibly human-gated (for example `Open` plus an agreed author-
+  review marker) rather than silently entering the technical dispatcher queue.
+
+## 2026-07-21 — eoru-1426 durable Reformal threading corrected after review
+
+- The fix2 worker was interrupted after partial code/test, cron-prompt, report,
+  and handoff changes had landed. Lease-backed fix3 inspected and preserved the
+  correct partial artifacts, completed focused/full local validation, and read
+  back both cron contracts. Final independent re-review passed with no critical
+  or major findings.
+- Hardened `/home/avo/clawd/research/youtrack/rueo_mail_ingest.py`: stable
+  Reformal `ia` is now parsed strictly from one exact supported host/project
+  URL with one numeric query parameter; embedded, duplicate, conflicting,
+  nonnumeric, hostile-host, and ambiguous URL inputs fail closed. Root recovery
+  continues from local message/root state and exact existing
+  YouTrack evidence, fail-closed `manual_review` for missing/unknown/ambiguous
+  roots, durable per-message markers for remote idempotency, atomic state saves,
+  and deterministic top-level JSON-array stdout/logs.
+- Added eleven fixture/fake-only tests covering feedback-to-root,
+  reply-to-comment, empty-state YouTrack recovery, unknown and ambiguous roots,
+  crash-style rerun recovery, supported legacy/current URLs, adversarial `ia`
+  inputs, wrong-root prevention, and cron output shape. No
+  network, IMAP, database, live ingest, or YouTrack mutation was used.
+- Updated only the prompts of the existing Rueo 08:00/20:00 cron jobs
+  (`773fc811-b511-4ace-af65-696a3d408da3`,
+  `c1fee467-50ee-4399-b265-88930f748bab`). They now require top-level-array
+  inspection (never `.items`) and a Rueo-topic notice for every ingest
+  `manual_review` with the exact retry reason and available root evidence.
+  Readback preserved schedule/model/delivery/routing/failure-alert fields; the
+  jobs were not run.
+- Read-only reconciliation preview:
+  `/home/avo/clawd/research/youtrack/eoru-1426-rueo-11-12-reconciliation-preview.json`.
+  `RUEO-11` likely belongs on `eoru-515` (same `ia=1054059`, explicit root
+  feedback evidence); `RUEO-12` remains unresolved because its only preserved
+  same-`ia=237217` match, `eoru-1233`, is itself comment-shaped. The artifact
+  contains exact non-applied plans; neither historical issue was changed.
+- Recovery report:
+  `/home/avo/clawd/memory-bank/tasks/2026-07-21-eoru-1426-reformal-threading.md`.
+  The two first-review major findings are corrected and independently verified.
+  Follow-ups were split into `eoru-1462` (execution-ready pagination hardening),
+  `eoru-1463` (human-gated `RUEO-11 -> eoru-515` migration), and `eoru-1464`
+  (human-gated root decision for `RUEO-12`). All are `Open` without `dev-board`;
+  no historical migration was performed.
+
+## 2026-07-21 — reconciled eoru-1424/1425/1426 with live RUEO mail ingest
+
+- `eoru-1424` is now `Verified`: the preview/apply helper and guarded
+  autoclean exist, the safe historical HTML cleanup was completed, and the
+  08:00/20:00 maintenance contour remains active.
+- `eoru-1425` is now `Won't fix` as a separate historical batch: its old eoru
+  fixtures remain preserved, while the useful current threading work was
+  consolidated into `eoru-1426`.
+- `eoru-1426` was rewritten around the remaining live gap and moved to
+  `In Progress` with `dev-board`. Current evidence: 52 handled mailbox
+  messages, 7 known Reformal roots, and comment `4-317` correctly attached to
+  `RUEO-23`; however `RUEO-11` and `RUEO-12` remain standalone replies because
+  their roots were absent from the local state file.
+- Acceptance now requires durable root recovery, fail-closed manual review for
+  unknown roots, idempotency tests, a read-only reconciliation preview for
+  `RUEO-11/12`, and deterministic cron summaries. Historical YouTrack data,
+  production, commit, and deploy are outside autonomous apply scope.
+- Dispatcher gate readback is eligible/ready with no blockers or active card;
+  the enabled 15-minute dispatcher may claim `eoru-1426` on its next queue
+  pass. No worker had claimed it at this checkpoint.
+
+## 2026-07-20 — prod dictionary refresh to `прикармливать`
+
+Dictionary refresh completed on prod to last Russian word `прикармливать`, including the legacy old.rueo.ru contour.
+
+Command and supervision:
+- `./scripts/rueo_update.sh run-all --last-ru-letter 'прикармливать'`
+- Durable worker PID `65391`; supervisor log `/home/avo/rueo_master/tmp/rueo_update_20260719T223523Z.log`.
+- Worker log lifetime: `01:35:52`–`01:39:31` MSK, about `3m 40s` total.
+- New PostgreSQL dump was ready after about `1m 51s`; the remaining server restore/deploy plus legacy test/backup/prod contour completed by `3m 40s`.
+
+Database safety and counts:
+- Both target databases were classified as persistent before the run; pre-run counts and prior snapshots were recorded in `/home/avo/clawd/.active-task.json`.
+- New PostgreSQL counts after run: `artikoloj 46657`, `artikoloj_ru 58668`, `sercxo 93497`, `sercxo_ru 90311`, `neklaraj 838`.
+- Legacy MySQL counts after run: `artikoloj 46657`, `artikoloj_ru 58668`, `sercxo 93517`, `sercxo_ru 90313`, `neklaraj 838`, `statistiko 276652`.
+- No protected-table count unexpectedly decreased; `statistiko` remained populated (`276650` before, `276652` after).
+
+Artifacts and verification:
+- New-site dump: `/home/avo/rueo_master/tmp/rueo_db_20260719T223742Z.dump` (`14693692` bytes).
+- Legacy backup: `/root/old_rueo_vortaro_20260719T223807Z.sql` (`55336708` bytes).
+- Legacy test log: `/var/www/slovari/data/www/updater.rueo.ru/logs/old-rueo-test-20260719T223807Z.log`.
+- Legacy prod log: `/var/www/slovari/data/www/updater.rueo.ru/logs/old-rueo-prod-20260719T223807Z.log`.
+- `https://rueo.ru/search?query=прикармливать`: HTTP `200`, JSON `count: 1`, curl total `0.696382s`.
+- `https://old.rueo.ru/sercxo/прикармливать`: HTTP `200`, page contains the word/article, curl total `0.566023s`.
+- Both new and old `renovigxo` files start with `20 июля 2026 года`.
+
+No commit was made. Current intentional local changes remain uncommitted; include `memory-bank/*` in the next approved commit per workspace rule.
+
+## 2026-07-15 — prod dictionary refresh to `прийтись`
+
+Dictionary refresh completed on prod to last Russian word `прийтись`, including the legacy old.rueo.ru contour.
+
+Command:
+- `./scripts/rueo_update.sh run-all --last-ru-letter 'прийтись'`
+
+New rueo.ru pipeline:
+- Dropbox sync-in, local import, sync-back, dump, server restore, and `tekstoj` deploy completed on `firstvds-stage`.
+- New-site PostgreSQL dump kept at: `/home/avo/rueo_master/tmp/rueo_db_20260714T232156Z.dump`.
+- Import/server counts: EO articles `46655`, RU articles `58667`, EO search `93489`, RU search `90304`, fuzzy `838`.
+- Verification: `https://rueo.ru/search?query=прийтись` returned HTTP `200`, JSON `count: 1`.
+- New `renovigxo.md` starts `15 июля 2026 года`.
+
+old.rueo.ru legacy update:
+- Backup: `/root/old_rueo_vortaro_20260714T232222Z.sql`.
+- Test log: `/var/www/slovari/data/www/updater.rueo.ru/logs/old-rueo-test-20260714T232222Z.log`.
+- Prod log: `/var/www/slovari/data/www/updater.rueo.ru/logs/old-rueo-prod-20260714T232222Z.log`.
+- Legacy table counts after run: `artikoloj 46655`, `artikoloj_ru 58667`, `sercxo 93509`, `sercxo_ru 90306`, `neklaraj 838`, `statistiko 273340`.
+- `statistiko` was not truncated by the importer and remains populated.
+- Verification: `https://old.rueo.ru/sercxo/прийтись` returned HTTP `200` and contains the word/article.
+- Old `renovigxo.textile` starts `15 июля 2026 года`.
+
+No commit was made. Current intentional local changes include previous script default updates and memory docs; include `memory-bank/*` in the next approved commit per workspace rule.
+
+## 2026-07-09 — prod dictionary refresh to `приисковый`
+
+Dictionary refresh completed on prod to last Russian word `приисковый`, including the legacy old.rueo.ru contour.
+
+Command:
+- `./scripts/rueo_update.sh run-all --last-ru-letter 'приисковый'`
+
+New rueo.ru pipeline:
+- Dropbox sync-in, local import, sync-back, dump, server restore, and `tekstoj` deploy completed on `firstvds-stage`.
+- New-site PostgreSQL dump kept at: `/home/avo/rueo_master/tmp/rueo_db_20260708T211844Z.dump`.
+- Import/server counts: EO articles `46652`, RU articles `58672`, EO search `93474`, RU search `90302`, fuzzy `838`.
+- Verification: `https://rueo.ru/search?query=приисковый` returned HTTP `200`, JSON `count: 1`.
+- New `renovigxo.md` starts `9 июля 2026 года`.
+
+old.rueo.ru legacy update:
+- Backup: `/root/old_rueo_vortaro_20260708T211910Z.sql`.
+- Test log: `/var/www/slovari/data/www/updater.rueo.ru/logs/old-rueo-test-20260708T211910Z.log`.
+- Prod log: `/var/www/slovari/data/www/updater.rueo.ru/logs/old-rueo-prod-20260708T211910Z.log`.
+- Legacy table counts after run: `artikoloj 46652`, `artikoloj_ru 58672`, `sercxo 93494`, `sercxo_ru 90304`, `neklaraj 838`, `statistiko 269618`.
+- `statistiko` was not truncated by the importer and remains populated.
+- Verification: `https://old.rueo.ru/sercxo/приисковый` returned HTTP `200` and contains the word/article.
+- Old `renovigxo.textile` starts `9 июля 2026 года`.
+
+No commit was made. Current intentional local changes include previous script default updates and memory docs; include `memory-bank/*` in the next approved commit per workspace rule.
+
+## 2026-07-06 — prod dictionary refresh to `призывать`
+
+Dictionary refresh completed on prod to last Russian word `призывать`, including the legacy old.rueo.ru contour.
+
+Evening follow-up:
+- Sasha noticed the 20:00 Rueo YouTrack mail ingest report was landing in the default direct/main Telegram stream instead of the rueo.ru topic.
+- Root cause: both OpenClaw cron jobs (`08:00` id `773fc811-b511-4ace-af65-696a3d408da3`, `20:00` id `c1fee467-50ee-4399-b265-88930f748bab`) had `delivery.mode=none` without `threadId`, and their prompts only said to send Sasha a Telegram message.
+- Updated both cron payload prompts to require OpenClaw `message(action="send", target="telegram:2631113", threadId="361351")` for any user-visible Rueo YouTrack maintenance notice.
+- Also set both jobs' inactive `delivery` metadata to `channel=telegram`, `to=telegram:2631113`, `threadId=361351`, `bestEffort=true` for clarity. The cron API rejected `threadId` under `failureAlert`, so failure alerts may still use the generic direct route; normal created-issue reports should now go to the rueo.ru topic.
+
+Command:
+- `./scripts/rueo_update.sh run-all --last-ru-letter 'призывать'`
+
+New rueo.ru pipeline:
+- Dropbox sync-in, local import, sync-back, dump, server restore, and `tekstoj` deploy completed on `firstvds-stage`.
+- New-site PostgreSQL dump kept at: `/home/avo/rueo_master/tmp/rueo_db_20260705T215853Z.dump`.
+- Import/server counts: EO articles `46651`, RU articles `58697`, EO search `93468`, RU search `90329`, fuzzy `838`.
+- Verification: `https://rueo.ru/search?query=призывать` returned HTTP `200`, JSON `count: 1`.
+- New `renovigxo.md` starts `6 июля 2026 года`.
+
+old.rueo.ru legacy update:
+- Backup: `/root/old_rueo_vortaro_20260705T215918Z.sql`.
+- Test log: `/var/www/slovari/data/www/updater.rueo.ru/logs/old-rueo-test-20260705T215918Z.log`.
+- Prod log: `/var/www/slovari/data/www/updater.rueo.ru/logs/old-rueo-prod-20260705T215918Z.log`.
+- Legacy table counts after run: `artikoloj 46651`, `artikoloj_ru 58697`, `sercxo 93488`, `sercxo_ru 90331`, `neklaraj 838`, `statistiko 268647`.
+- `statistiko` was not truncated by the importer and remains populated.
+- Verification: `https://old.rueo.ru/sercxo/призывать` returned HTTP `200` and contains the word/article.
+- Old `renovigxo.textile` starts `6 июля 2026 года`.
+
+No commit was made. Current intentional local changes include previous script default updates and memory docs; include `memory-bank/*` in the next approved commit per workspace rule.
+
+## 2026-07-04 — prod dictionary update to `призывать` after FirstVDS move
+
+Dictionary update completed on prod to last Russian word `призывать`, including the legacy old.rueo.ru contour on the new FirstVDS Stage server.
+
+Pre-flight fix:
+- Checked the `rueo_update` skill before the run. It still pointed the project scripts at the old Timeweb origin `root@72.56.13.203`.
+- Updated local defaults to the working SSH alias `firstvds-stage` in:
+  - `scripts/rueo_update.sh`
+  - `scripts/deploy_frontend_pwa.sh`
+  - `memory-bank/FRONTEND_DEPLOYMENT.md`
+- Also updated `/home/avo/clawd/skills/rueo_update/SKILL.md` so its frontend target note no longer names the old target.
+- Verified `bash -n` and help output: both `SERVER_SSH` and `OLD_UPDATER_SSH` now default to `firstvds-stage`.
+
+New rueo.ru pipeline:
+- Command: `./scripts/rueo_update.sh run --last-ru-letter 'призывать'`.
+- New-site PostgreSQL dump kept at: `/home/avo/rueo_master/tmp/rueo_db_20260703T213051Z.dump`.
+- Import counts: EO articles `46650`, RU articles `58743`, EO search `93462`, RU search `90375`, fuzzy `838`.
+- Tracking summary: EO changed `18`, auto-dated `9`, new `10`; RU changed `49`, auto-dated `48`, new `12`.
+- Server restore and `tekstoj` deploy completed on `firstvds-stage`.
+- Verification: `https://rueo.ru/search?query=призывать` returned HTTP `200`, JSON `count: 1`.
+- New `renovigxo.md` starts `4 июля 2026 года`.
+
+old.rueo.ru legacy update:
+- First `run-old` on the new server exposed missing migration pieces:
+  - `slovari_vuser` lacked access to `slovari_vortaro_test`;
+  - `slovari_vortaro_test` did not exist with the old updater schema.
+- Fixed on `firstvds-stage` by creating `slovari_vortaro_test`, granting `slovari_vuser` the same dictionary-table privileges for the test DB, and loading schema-only structure from `slovari_vortaro`.
+- Schema backup before loading test DB schema: `/root/old-rueo-testdb-schema-backups/slovari_vortaro_schema_20260703T213251Z.sql`.
+- Successful command after fixes: `./scripts/rueo_update.sh run-old --last-ru-letter 'призывать'`.
+- Backup: `/root/old_rueo_vortaro_20260703T213337Z.sql`.
+- Test log: `/var/www/slovari/data/www/updater.rueo.ru/logs/old-rueo-test-20260703T213337Z.log`.
+- Prod log: `/var/www/slovari/data/www/updater.rueo.ru/logs/old-rueo-prod-20260703T213337Z.log`.
+- Legacy table counts after run: `artikoloj 46650`, `artikoloj_ru 58743`, `sercxo 93482`, `sercxo_ru 90377`, `neklaraj 838`, `statistiko 268498`.
+- `statistiko` was not truncated by the importer and remains populated.
+- Verification: `https://old.rueo.ru/sercxo/призывать` returned HTTP `200` and contains the word/article.
+- Old `renovigxo.textile` starts `4 июля 2026 года`.
+
+No commit was made. Current intentional local changes include the two script default updates and memory docs; include `memory-bank/*` in the next approved commit per workspace rule.
 
 ## 2026-06-27 — rueo.ru `/orph` mail route and Date header hotfix
 

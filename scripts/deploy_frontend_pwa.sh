@@ -9,9 +9,9 @@ REPO_DIR="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
 FRONTEND_DIR="${REPO_DIR}/frontend-app"
 DIST_DIR="${FRONTEND_DIR}/dist/pwa"
 
-# While public rueo.ru is routed through the emergency proxy, deploy to the
-# Timeweb origin IP directly. Override SERVER_SSH when normal routing is back.
-SERVER_SSH_DEFAULT="root@72.56.13.203"
+# Production rueo.ru now lives on the FirstVDS Stage host. The local SSH alias
+# carries the required key/user configuration.
+SERVER_SSH_DEFAULT="firstvds-stage"
 SERVER_WEB_ROOT_DEFAULT="/var/www/slovari/data/www/rueo.ru"
 SERVER_OWNER_DEFAULT="slovari:slovari"
 
