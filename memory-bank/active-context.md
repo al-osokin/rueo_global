@@ -1,6 +1,19 @@
 # Active Context — rueo_global
 
-Updated: 2026-05-16 01:35 (Europe/Moscow)
+Updated: 2026-09-08 02:39 (Europe/Moscow)
+
+## 2026-09-08 — friendly projects mirrored from Stage I
+
+- Mirrored the accepted Stage I `Проекты` navigation item and `/projektoj`
+  page into `feature/Stage_II` after the Stage I `develop`/`master`
+  realignment. The page lists Biologio and Frazaro with separate Russian and
+  Esperanto descriptions and safe external links.
+- The shared layout and new page match Stage I; the Stage II router retains its
+  additional admin routes. Strict OpenSpec validation, targeted ESLint, and
+  the Quasar 1.0.8 PWA build passed.
+- Existing unrelated local work in `frontend-app/src/pages/AdminV4Review.vue`,
+  `.learnings/`, and `backend/.env.lmstudio` was not modified or included in
+  the feature package. No deployment or database operation was performed.
 
 ## Current governing workflow
 - Primary task contour for `rueo_global` / Stage II is now YouTrack project `eoru` / **Словари**.
