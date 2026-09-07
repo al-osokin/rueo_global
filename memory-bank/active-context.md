@@ -1,5 +1,551 @@
 # Active Context — rueo.ru / YouTrack cleanup
 
+Updated: 2026-09-08 02:34 (Europe/Moscow)
+
+## 2026-09-08 — branch realignment and friendly projects
+
+- Audited the Stage I repository after cherry-picks had made `master` and
+  `develop` histories difficult to reconcile. The deployed 1.0.8 code and the
+  current production workflow are based on `develop`; the old `master` was
+  still at 1.0.5.
+- Preserved the old remote `master` exactly as
+  `archive/master-before-realign-2026-09-08` at
+  `2a6da318b913b9f44b8545bab352f1219b860dd0`.
+- Pushed the four local production commits on `develop`, then realigned remote
+  `master` to the exact `develop` tip with `--force-with-lease`. Remote
+  `master`, remote `develop`, and both local branches were verified at
+  `eb646a43725bf4ebd85cf559673c092584e6bcd6`. `master` remains the GitHub
+  default branch. The obsolete local `rueo_master` branch had no unique work
+  and was removed after ancestry checks.
+- Added the accepted `Проекты` navigation destination and `/projektoj` page to
+  the current Stage I `develop` base. The page lists Biologio and Frazaro with
+  separate Russian and Esperanto descriptions. Desktop, mobile, light, and
+  dark layouts were reviewed; targeted ESLint, strict OpenSpec validation, and
+  the Quasar PWA build passed.
+- No frontend deployment or database operation was performed. Next: commit and
+  push the accepted Stage I page, fast-forward `master`, then port the same
+  change to `feature/Stage_II` without touching its unrelated working-tree
+  changes.
+
+## 2026-09-06 — prod dictionary refresh to `прилечь`
+
+- Completed the full new + legacy production pipeline with
+  `./scripts/rueo_update.sh run-all --last-ru-letter 'прилечь'` through
+  native worker `/root/rueo_update_prilech`, exec session `37794`, PID
+  `536018`. Worker log:
+  `/home/avo/rueo_master/tmp/rueo_update_20260905T214254Z.log`.
+- Database safety: both production databases on `firstvds-stage` were
+  classified as persistent. Before mutation, protected counts were recorded
+  and fresh verified snapshots were created:
+  `/root/rueo_db_preupdate_20260905T214254Z.dump` (14,936,134 bytes,
+  SHA-256
+  `5299adf75ab0b8e7478807e6cece29a6b32df574f9c8b163d72d17bd48fab9c6`)
+  and `/root/old_rueo_vortaro_preupdate_20260905T214254Z.sql` (56,166,058
+  bytes, SHA-256
+  `92b9d90686c047b14a70f7b1392ed4ee591b617f968a8fe74c053510327f8be3`).
+  PostgreSQL passed `pg_restore -l`; the MySQL dump has its completion marker
+  and includes `statistiko`.
+- New PostgreSQL dump:
+  `/home/avo/rueo_master/tmp/rueo_db_20260905T214550Z.dump` (14,772,764
+  bytes, SHA-256
+  `bfba8aa11031f2b8adecf14aeec4340b49c8800ce0f54502354abab9e37941cd`,
+  `pg_restore -l` passed).
+- Legacy backup: `/root/old_rueo_vortaro_20260905T214624Z.sql` (56,166,058
+  bytes, SHA-256
+  `e6688f51d654f6bf0f4e0cb552d364a166acf6677de5e5e10f4c93da733b7d19`).
+  Test/prod logs are
+  `/var/www/slovari/data/www/updater.rueo.ru/logs/old-rueo-test-20260905T214624Z.log`
+  and
+  `/var/www/slovari/data/www/updater.rueo.ru/logs/old-rueo-prod-20260905T214624Z.log`.
+- Counts before: PostgreSQL `artikoloj=46686`, `artikoloj_ru=58582`,
+  `sercxo=93574`, `sercxo_ru=90279`, `neklaraj=838`; MySQL
+  `artikoloj=46686`, `artikoloj_ru=58582`, `sercxo=93594`,
+  `sercxo_ru=90281`, `neklaraj=838`, `statistiko=286710`.
+- Counts after: PostgreSQL `artikoloj=46691`, `artikoloj_ru=58568`,
+  `sercxo=93603`, `sercxo_ru=90278`, `neklaraj=838`; MySQL
+  `artikoloj=46691`, `artikoloj_ru=58568`, `sercxo=93623`,
+  `sercxo_ru=90280`, `neklaraj=838`, `statistiko=286711`. The 14-article
+  Russian reduction and one-entry Russian search reduction are identical in
+  both independent importers and match the current source output; Esperanto
+  and Esperanto search counts increased, fuzzy stayed stable, and live
+  `statistiko` was preserved (the one-row increase came from the supervisor's
+  legacy HTTP verification).
+- Sasha's ready-range metrics in deployed `klarigo.md`: `32287` ready
+  Russian–Esperanto articles and `52804` words, range `А — прилечь`. These
+  increased from `32263` / `52761` and remain separate from total technical
+  table counts.
+- `https://rueo.ru/search?query=прилечь`: HTTP 200, `count=1`, article
+  present. `https://old.rueo.ru/sercxo/прилечь`: HTTP 200, article present.
+  Both `renovigxo` files start with `6 сентября 2026 года`.
+- Durable state `/home/avo/rueo_master/tmp/rueo_update_active.json` is
+  `completed`. No commit, cron/Gateway change, frontend deploy, or unrelated
+  mutation was performed.
+
+## 2026-08-27 — prod dictionary refresh to `прикупить`
+
+- Completed the full new + legacy production pipeline with
+  `./scripts/rueo_update.sh run-all --last-ru-letter 'прикупить'` through
+  native worker `/root/rueo_update_prikupit` and recoverable background PID
+  `1550269`. Worker log:
+  `/home/avo/rueo_master/tmp/rueo_update_20260826T211334Z.log`.
+- Database safety: both production databases on `firstvds-stage` were
+  classified as persistent. Before mutation, protected counts were recorded
+  and fresh verified snapshots were created:
+  `/root/rueo_db_preupdate_20260826T211303Z.dump` (14,896,145 bytes,
+  SHA-256
+  `ca85d31a37587ef7bccbda9d468202f716009781d0fac157cd3cd9a04090119c`)
+  and `/root/old_rueo_vortaro_preupdate_20260826T211303Z.sql` (55,909,073
+  bytes, SHA-256
+  `1fe5ee833760e151139ca73e2f2d8c70baec22923544c5c1c1dfccada427a7ed`).
+  PostgreSQL passed `pg_restore -l`; the MySQL dump has its completion marker
+  and includes `statistiko`.
+- New PostgreSQL dump:
+  `/home/avo/rueo_master/tmp/rueo_db_20260826T211559Z.dump` (14,741,846
+  bytes, SHA-256
+  `92bb0ba73fc68b4a12ecc51021ded7b349bf129fe684821a8e12894a17fa9e5b`,
+  `pg_restore -l` passed).
+- Legacy backup: `/root/old_rueo_vortaro_20260826T211636Z.sql` (55,909,073
+  bytes, SHA-256
+  `72e9d34f5d9f14b24b70cb9cb2cd650a1b6f2b45146d20c4badf99c4ae248ccc`).
+  Test/prod logs are
+  `/var/www/slovari/data/www/updater.rueo.ru/logs/old-rueo-test-20260826T211636Z.log`
+  and
+  `/var/www/slovari/data/www/updater.rueo.ru/logs/old-rueo-prod-20260826T211636Z.log`.
+- Counts before: PostgreSQL `artikoloj=46674`, `artikoloj_ru=58586`,
+  `sercxo=93548`, `sercxo_ru=90268`, `neklaraj=838`; MySQL
+  `artikoloj=46674`, `artikoloj_ru=58586`, `sercxo=93568`,
+  `sercxo_ru=90270`, `neklaraj=838`, `statistiko=283555`.
+- Counts after: PostgreSQL `artikoloj=46686`, `artikoloj_ru=58582`,
+  `sercxo=93574`, `sercxo_ru=90279`, `neklaraj=838`; MySQL
+  `artikoloj=46686`, `artikoloj_ru=58582`, `sercxo=93594`,
+  `sercxo_ru=90281`, `neklaraj=838`, `statistiko=283557`. The four-article
+  Russian reduction is identical in both independent importers and matches
+  the current source output; Esperanto and search counts increased, fuzzy
+  stayed stable, and live `statistiko` was preserved (the two-row increase
+  came from worker and supervisor legacy HTTP verification).
+- Sasha's ready-range metrics in deployed `klarigo.md`: `32263` ready
+  Russian–Esperanto articles and `52761` words, range `А — прикупить`.
+  These increased from `32256` / `52749` and remain separate from total
+  technical table counts.
+- `https://rueo.ru/search?query=прикупить`: HTTP 200, `count=1`, article
+  present. `https://old.rueo.ru/sercxo/прикупить`: HTTP 200, article present.
+  Both `renovigxo` files start with `27 августа 2026 года`.
+- Durable state `/home/avo/rueo_master/tmp/rueo_update_active.json` and global
+  task state `/home/avo/clawd/.active-task.json` are `completed`. No commit,
+  cron/Gateway change, frontend deploy, or unrelated mutation was performed.
+
+## 2026-08-19 — prod dictionary refresh to `прикроватный`
+
+- Completed the full new + legacy production pipeline with
+  `./scripts/rueo_update.sh run-all --last-ru-letter 'прикроватный'` through
+  durable exec session `23731` (PID `3244115`). Worker log:
+  `/home/avo/rueo_master/tmp/rueo_update_20260818T211711Z.log`.
+- Database safety: both production databases on `firstvds-stage` were
+  classified as persistent. Before mutation, protected counts were recorded
+  and fresh verified snapshots were created:
+  `/root/rueo_db_preupdate_20260818T211711Z.dump` (14,859,991 bytes,
+  SHA-256
+  `23d9566417b16fe2792f81a70854f083a74c259bfed7707f1e190bcae0cca2e1`)
+  and `/root/old_rueo_vortaro_preupdate_20260818T211711Z.sql` (55,828,601
+  bytes, SHA-256
+  `6d4b93b2e8ac22bd292e35ed65e38ee5c9da0d04326f10a8972392abfc9b5d27`).
+  PostgreSQL passed `pg_restore -l`; the MySQL dump has its completion marker
+  and includes `statistiko`.
+- New PostgreSQL dump:
+  `/home/avo/rueo_master/tmp/rueo_db_20260818T212019Z.dump` (14,749,199
+  bytes, SHA-256
+  `7c1951250f121f0c3175885f2bce70d4bfa187eda67520369342e045ed53d1d7`,
+  `pg_restore -l` passed).
+- Legacy backup: `/root/old_rueo_vortaro_20260818T212055Z.sql` (55,828,543
+  bytes, SHA-256
+  `d49fa6a49b45b22aaac96fe5e3e2ae4d4c56fcf33251b33d4282a92d9a4e5399`).
+  Test/prod logs are
+  `/var/www/slovari/data/www/updater.rueo.ru/logs/old-rueo-test-20260818T212055Z.log`
+  and
+  `/var/www/slovari/data/www/updater.rueo.ru/logs/old-rueo-prod-20260818T212055Z.log`.
+- Counts before: PostgreSQL `artikoloj=46669`, `artikoloj_ru=58628`,
+  `sercxo=93533`, `sercxo_ru=90303`, `neklaraj=838`; MySQL
+  `artikoloj=46669`, `artikoloj_ru=58628`, `sercxo=93553`,
+  `sercxo_ru=90305`, `neklaraj=838`, `statistiko=282578`.
+- Counts after: PostgreSQL `artikoloj=46674`, `artikoloj_ru=58586`,
+  `sercxo=93548`, `sercxo_ru=90268`, `neklaraj=838`; MySQL
+  `artikoloj=46674`, `artikoloj_ru=58586`, `sercxo=93568`,
+  `sercxo_ru=90270`, `neklaraj=838`, `statistiko=282580`. The Russian
+  article/search reductions are identical in both independent importers and
+  match the current source output; Esperanto counts increased, fuzzy stayed
+  stable, and live `statistiko` was preserved (the two-row increase came from
+  legacy HTTP verification requests).
+- Sasha's ready-range metrics in deployed `klarigo.md`: `32256` ready
+  Russian–Esperanto articles and `52749` words, range `А — прикроватный`.
+  These increased from `32247` / `52728` and remain separate from total
+  technical table counts.
+- `https://rueo.ru/search?query=прикроватный`: HTTP 200, `count=1`, article
+  present. `https://old.rueo.ru/sercxo/прикроватный`: HTTP 200, article
+  present. Both `renovigxo` files start with `19 августа 2026 года`.
+- Durable state `/home/avo/rueo_master/tmp/rueo_update_active.json` is
+  `completed`. No commit, cron/Gateway change, frontend deploy, or unrelated
+  mutation was performed.
+
+## 2026-08-11 — prod dictionary refresh to `прикраса`
+
+- Completed the full new + legacy production pipeline with
+  `./scripts/rueo_update.sh run-all --last-ru-letter 'прикраса'` through
+  durable exec session `14165` (PID `512730`). Worker log:
+  `/home/avo/rueo_master/tmp/rueo_update_20260810T212740Z.log`.
+- Database safety: both production databases on `firstvds-stage` were
+  classified as persistent. Before mutation, protected counts were recorded
+  and fresh verified snapshots were created:
+  `/root/rueo_db_preupdate_20260810T212740Z.dump` (14,780,861 bytes,
+  SHA-256
+  `a45a9b01639057bbb70feacde478f0444a1fd5bf8ba362eb229d5bd0347ccb63`)
+  and `/root/old_rueo_vortaro_preupdate_20260810T212740Z.sql` (55,798,918
+  bytes, SHA-256
+  `116f6899243ac0cb4584880490913415d1ab399140e4f84507dbd42a09f36a2a`).
+  PostgreSQL passed `pg_restore -l`; the MySQL dump has its completion marker
+  and includes `statistiko`.
+- New PostgreSQL dump:
+  `/home/avo/rueo_master/tmp/rueo_db_20260810T213043Z.dump` (14,719,836
+  bytes, SHA-256
+  `2cb0abad1164da360d134dbd1652e7055d664feeec57250d12682e216b46f1f8`,
+  `pg_restore -l` passed).
+- Legacy backup: `/root/old_rueo_vortaro_20260810T213124Z.sql` (55,798,918
+  bytes, SHA-256
+  `1f1ea092f7de51cd7d38311097fd59459ad650fe7b577b05bff6f1359bd8f0db`).
+  Test/prod logs are
+  `/var/www/slovari/data/www/updater.rueo.ru/logs/old-rueo-test-20260810T213124Z.log`
+  and
+  `/var/www/slovari/data/www/updater.rueo.ru/logs/old-rueo-prod-20260810T213124Z.log`.
+- Counts before: PostgreSQL `artikoloj=46669`, `artikoloj_ru=58634`,
+  `sercxo=93532`, `sercxo_ru=90296`, `neklaraj=838`; MySQL
+  `artikoloj=46669`, `artikoloj_ru=58634`, `sercxo=93552`,
+  `sercxo_ru=90298`, `neklaraj=838`, `statistiko=282225`.
+- Counts after: PostgreSQL `artikoloj=46669`, `artikoloj_ru=58628`,
+  `sercxo=93533`, `sercxo_ru=90303`, `neklaraj=838`; MySQL
+  `artikoloj=46669`, `artikoloj_ru=58628`, `sercxo=93553`,
+  `sercxo_ru=90305`, `neklaraj=838`, `statistiko=282226`. The six-article
+  Russian reduction is identical in both independent importers and matches
+  the current source output; all other protected dictionary counts increased
+  or stayed stable, and live `statistiko` was preserved.
+- Sasha's ready-range metrics in deployed `klarigo.md`: `32247` ready
+  Russian–Esperanto articles and `52728` words, range `А — прикраса`. These
+  increased from `32237` / `52710` and remain separate from total technical
+  table counts.
+- `https://rueo.ru/search?query=прикраса`: HTTP 200, `count=1`, article
+  present. `https://old.rueo.ru/sercxo/прикраса`: HTTP 200, article present.
+  Both `renovigxo` files start with `11 августа 2026 года`.
+- Durable state `/home/avo/rueo_master/tmp/rueo_update_active.json` is
+  `completed`. No commit, cron/Gateway change, frontend deploy, or unrelated
+  mutation was performed.
+
+## 2026-08-08 — prod dictionary refresh to `приколоться`
+
+- Completed the full new + legacy production pipeline with
+  `./scripts/rueo_update.sh run-all --last-ru-letter 'приколоться'` through
+  durable exec session `57678`. Worker log:
+  `/home/avo/rueo_master/tmp/rueo_update_20260808T131844Z.log`.
+- Database safety: both production databases on `firstvds-stage` were
+  classified as persistent. Before mutation, protected counts were recorded
+  and fresh verified snapshots were created:
+  `/root/rueo_db_preupdate_20260808T131844Z.dump` (14,775,804 bytes,
+  SHA-256
+  `e6a81f649852909fef187bf0881aab2639d97aab0c19d01765c22c93162666fd`)
+  and `/root/old_rueo_vortaro_preupdate_20260808T131844Z.sql` (55,788,324
+  bytes, SHA-256
+  `2a2621157d41103eec19d414f043cd7e8fd463f14d089185a879c22a6b07e440`).
+  PostgreSQL passed `pg_restore -l`; the MySQL dump has its completion marker
+  and includes `statistiko`.
+- New PostgreSQL dump:
+  `/home/avo/rueo_master/tmp/rueo_db_20260808T132128Z.dump` (14,735,783
+  bytes, SHA-256
+  `9391fe3576227c0d3d8dfe68057f25e489596a0bf14384597464fda17ddca3f2`,
+  `pg_restore -l` passed).
+- Legacy backup: `/root/old_rueo_vortaro_20260808T132204Z.sql` (55,788,324
+  bytes, SHA-256
+  `2ac7316e0b4a7ce3230553d2105e82958f90a95f04960463830dbd1fe7a961ca`).
+  Test/prod logs are
+  `/var/www/slovari/data/www/updater.rueo.ru/logs/old-rueo-test-20260808T132204Z.log`
+  and
+  `/var/www/slovari/data/www/updater.rueo.ru/logs/old-rueo-prod-20260808T132204Z.log`.
+- Counts before: PostgreSQL `artikoloj=46665`, `artikoloj_ru=58633`,
+  `sercxo=93521`, `sercxo_ru=90293`, `neklaraj=838`; MySQL
+  `artikoloj=46665`, `artikoloj_ru=58633`, `sercxo=93541`,
+  `sercxo_ru=90295`, `neklaraj=838`, `statistiko=282150`.
+- Counts after: PostgreSQL `artikoloj=46669`, `artikoloj_ru=58634`,
+  `sercxo=93532`, `sercxo_ru=90296`, `neklaraj=838`; MySQL
+  `artikoloj=46669`, `artikoloj_ru=58634`, `sercxo=93552`,
+  `sercxo_ru=90298`, `neklaraj=838`, `statistiko=282151`. All protected
+  dictionary-table counts increased or stayed stable, and live `statistiko`
+  was preserved.
+- Sasha's ready-range metrics in deployed `klarigo.md`: `32237` ready
+  Russian–Esperanto articles and `52710` words, range `А — приколоться`.
+  These increased from `32227` / `52699` and remain separate from total
+  technical table counts.
+- `https://rueo.ru/search?query=приколоться`: HTTP 200, `count=1`, article
+  present. `https://old.rueo.ru/sercxo/приколоться`: HTTP 200, article
+  present. Both `renovigxo` files start with `8 августа 2026 года`.
+- Durable state `/home/avo/rueo_master/tmp/rueo_update_active.json` is
+  `completed`. No commit, cron/Gateway change, frontend deploy, or unrelated
+  mutation was performed.
+
+## 2026-08-05 — prod dictionary refresh to `приковываться`
+
+- Completed the full new + legacy production pipeline with
+  `./scripts/rueo_update.sh run-all --last-ru-letter 'приковываться'` through
+  durable exec session `47185`. Worker log:
+  `/home/avo/rueo_master/tmp/rueo_update_20260804T212843Z.log`.
+- Database safety: both production databases on `firstvds-stage` were
+  classified as persistent. Before mutation, protected counts were recorded
+  and fresh verified snapshots were created:
+  `/root/rueo_db_preupdate_20260804T212843Z.dump` (14,801,333 bytes,
+  SHA-256
+  `bedec82abcd490348848fce389c72a5926028b89484ef785b8fcda9260a24b95`)
+  and `/root/old_rueo_vortaro_preupdate_20260804T212843Z.sql` (55,673,455
+  bytes, SHA-256
+  `0184173f4a122c0c56e75704befbeb55a8130c9ca0bd2e7b7af93b38de358c2f`).
+  PostgreSQL passed `pg_restore -l`; the MySQL dump has its completion marker
+  and includes `statistiko`.
+- New PostgreSQL dump:
+  `/home/avo/rueo_master/tmp/rueo_db_20260804T213139Z.dump` (14,711,980
+  bytes, SHA-256
+  `4f2d2f35fdc94d45c61d512ccc07916fe4b5475f151f277313bb0b17f250598d`,
+  `pg_restore -l` passed).
+- Legacy backup: `/root/old_rueo_vortaro_20260804T213214Z.sql` (55,673,455
+  bytes, SHA-256
+  `d3c98cd16943b48f8d7307fe3f26765974ff3e5a1ee5720831d686a05ea8b70e`).
+  Test/prod logs are
+  `/var/www/slovari/data/www/updater.rueo.ru/logs/old-rueo-test-20260804T213214Z.log`
+  and
+  `/var/www/slovari/data/www/updater.rueo.ru/logs/old-rueo-prod-20260804T213214Z.log`.
+- Counts before: PostgreSQL `artikoloj=46663`, `artikoloj_ru=58645`,
+  `sercxo=93516`, `sercxo_ru=90319`, `neklaraj=838`; MySQL
+  `artikoloj=46663`, `artikoloj_ru=58645`, `sercxo=93536`,
+  `sercxo_ru=90321`, `neklaraj=838`, `statistiko=280705`.
+- Counts after: PostgreSQL `artikoloj=46665`, `artikoloj_ru=58633`,
+  `sercxo=93521`, `sercxo_ru=90293`, `neklaraj=838`; MySQL
+  `artikoloj=46665`, `artikoloj_ru=58633`, `sercxo=93541`,
+  `sercxo_ru=90295`, `neklaraj=838`, `statistiko=280706` after verification.
+  The 12-article Russian reduction is identical in both independent importers
+  and matches the current source, while live `statistiko` was preserved.
+- Sasha's ready-range metrics in deployed `klarigo.md`: `32227` ready
+  Russian–Esperanto articles and `52699` words, range
+  `А — приковываться`. These increased from `32225` / `52692` and remain
+  separate from total technical table counts.
+- `https://rueo.ru/search?query=приковываться`: HTTP 200, `count=1`, article
+  present. `https://old.rueo.ru/sercxo/приковываться`: HTTP 200, article
+  present. Both `renovigxo` files start with `5 августа 2026 года`.
+- Durable state `/home/avo/rueo_master/tmp/rueo_update_active.json` is
+  `completed`. No commit, cron/Gateway change, frontend deploy, or unrelated
+  mutation was performed.
+
+## 2026-08-03 — production `rueo.ru` switched to TLS 1.2-only
+
+- Sasha authorized the second, separate protocol experiment after HTTP/2 was
+  enabled across Stage. Changed only production `rueo.ru` from
+  `ssl_protocols TLSv1.2 TLSv1.3;` to `ssl_protocols TLSv1.2;` at 22:42 MSK.
+- Hash comparison across all nginx vhosts confirmed that only
+  `/etc/nginx/vhosts/slovari/rueo.ru.conf` changed; its exact diff removes only
+  the `TLSv1.3` token. Backup and verification artifacts:
+  `/root/rueo-tls12-backups/20260803-224238`.
+- `rueo.ru` returns HTTP 200 over HTTP/2 + TLS 1.2 and forced HTTP/1.1 + TLS
+  1.2. `/`, `/package.json`, `/news.md`, `/status/info`, search, and suggestions
+  all return HTTP/2 200. Forced TLS 1.3 now fails with the expected protocol
+  version alert. Three control sites still return HTTP/2 200 over TLS 1.3.
+- `nginx -t`, reload, active-service, and journal checks passed. No other vhost,
+  TLS profile, certificate, application, database, ISPmanager setting, or
+  commit changed.
+- The August 3 traffic report was generated before this switch and is a
+  pre-experiment reference. Evaluate TLS 1.2-only using August 4 onward and
+  visitor feedback; do not attribute the earlier traffic rise to this change.
+
+## 2026-08-03 — HTTP/2 experiment extended to all Stage HTTPS vhosts
+
+- The isolated `rueo.ru` HTTP/2 phase completed two full daily reporting
+  cycles without an availability regression; human requests rose from 12,568
+  on August 1 to 14,164 on August 2 and 15,750 on August 3, while unique IPs
+  remained in the same broad range (542, 468, 505). Treat this as evidence of
+  no obvious breakage, not proof that HTTP/2 caused the traffic increase.
+- Sasha authorized a whole-Stage rollout. Added `http2 on;` to the remaining
+  20 nginx TLS vhosts, bringing all 21 current HTTPS vhosts to HTTP/2. The
+  existing `rueo.ru` config itself was unchanged in this rollout.
+- Every HTTPS vhost negotiated HTTP/2 and retained forced HTTP/1.1 with its
+  same pre-change status code. `nginx -t`, reload, service state, and journal
+  checks passed; representative sites still negotiate both TLS 1.2 and 1.3.
+- Server backup and verification artifacts:
+  `/root/stage-http2-backups/20260803-223608`. No TLS setting, certificate,
+  application, database, ISPmanager global setting, or commit was changed.
+- Continue ordinary monitoring. Any future TLS 1.2-only test remains a
+  separate phase and should not be inferred from this rollout.
+
+## 2026-08-01 — isolated HTTP/2 experiment on production `rueo.ru`
+
+- Sasha authorized a narrow HTTP/2 experiment on `rueo.ru`. The ISPmanager
+  HTTP/2 switch was deliberately not used because it is server-wide and the
+  managed vhosts contain custom configuration.
+- Added only `http2 on;` to the TLS server block in
+  `/etc/nginx/vhosts/slovari/rueo.ru.conf`. A complete before-copy and
+  verification artifacts are in
+  `/root/rueo-http2-backups/20260801-203240`.
+- Hash comparison across every file under `/etc/nginx/vhosts` confirmed that
+  only `rueo.ru.conf` changed. `nginx -t` passed, nginx reloaded cleanly and
+  remains active.
+- External checks: `/`, `/package.json`, `/news.md`, `/status/info`, a valid
+  `/search?query=test`, and `/suggest?term=test` all return HTTP 200 over
+  HTTP/2. Forced HTTP/1.1 remains HTTP 200, so the compatibility fallback is
+  intact. TLS 1.2 and TLS 1.3 both still negotiate with the same strong
+  ciphers as before. `teatrzazerkalye.ru` remains HTTP/1.1, proving the change
+  did not spill into another vhost.
+- This first phase changes HTTP negotiation only. Do not disable TLS 1.3 until
+  the HTTP/2-only experiment has been observed through daily traffic reports
+  and real visitor feedback. No application code, database, ISPmanager global
+  setting, certificate, or other vhost was changed.
+
+## 2026-08-01 — prod dictionary refresh to `приключиться`
+
+- Completed the full new + legacy production pipeline with
+  `./scripts/rueo_update.sh run-all --last-ru-letter 'приключиться'`.
+  Worker log:
+  `/home/avo/rueo_master/tmp/rueo_update_20260731T214756Z.log`.
+- Database safety: both production databases on `firstvds-stage` were
+  classified as persistent. Before mutation, protected counts were recorded
+  and fresh verified snapshots were created:
+  `/root/rueo_db_preupdate_20260731T214926Z.dump` (14,767,414 bytes,
+  SHA-256
+  `572546d88c52aa6c8b292c0984f71e6ebd5c58ce564f9afbc720a26133ce3a56`)
+  and `/root/old_rueo_vortaro_preupdate_20260731T214926Z.sql` (55,621,634
+  bytes, SHA-256
+  `fe7bb9f5fcb18981fe782539768abcf7ea0248814988fcedd6d173d681d5a002`).
+  PostgreSQL was validated with `pg_restore -l`; the MySQL dump is complete
+  and includes `statistiko`.
+- New PostgreSQL dump:
+  `/home/avo/rueo_master/tmp/rueo_db_20260731T215203Z.dump` (14,727,310
+  bytes, SHA-256
+  `2b4a6246cb7ae663033424d6d615ff2341392283edb0117de436b7d02bfc4f27`,
+  `pg_restore -l` passed).
+- Legacy backup: `/root/old_rueo_vortaro_20260731T215239Z.sql` (55,621,634
+  bytes, SHA-256
+  `595c8f764542578b22588c09fb2169edcb9f404e56b5ed961f2457fd453b8fe4`).
+  Test/prod logs are
+  `/var/www/slovari/data/www/updater.rueo.ru/logs/old-rueo-test-20260731T215239Z.log`
+  and
+  `/var/www/slovari/data/www/updater.rueo.ru/logs/old-rueo-prod-20260731T215239Z.log`.
+- Counts before: PostgreSQL `artikoloj=46660`, `artikoloj_ru=58650`,
+  `sercxo=93508`, `sercxo_ru=90314`, `neklaraj=838`; MySQL
+  `artikoloj=46660`, `artikoloj_ru=58650`, `sercxo=93528`,
+  `sercxo_ru=90316`, `neklaraj=838`, `statistiko=280104`.
+- Counts after: PostgreSQL `artikoloj=46663`, `artikoloj_ru=58645`,
+  `sercxo=93516`, `sercxo_ru=90319`, `neklaraj=838`; MySQL
+  `artikoloj=46663`, `artikoloj_ru=58645`, `sercxo=93536`,
+  `sercxo_ru=90321`, `neklaraj=838`, `statistiko=280104` before verification
+  and `280105` after the legacy HTTP check. The five-article reduction in the
+  Russian total is identical in both independent importers and matches the
+  current source, while the live `statistiko` table was preserved.
+- Sasha's ready-range metrics in deployed `klarigo.md`: `32225` ready
+  Russian–Esperanto articles and `52692` words, range `А — приключиться`.
+  These both increased from the preceding `32218` / `52671` and remain
+  separate from total technical table counts.
+- `https://rueo.ru/search?query=приключиться`: HTTP 200, `count=1`, article
+  present. `https://old.rueo.ru/sercxo/приключиться`: HTTP 200, article
+  present. Both `renovigxo` files start with `1 августа 2026 года`.
+- Durable state `/home/avo/rueo_master/tmp/rueo_update_active.json` is
+  `completed`. No commit, cron/Gateway change, frontend deploy, or unrelated
+  mutation was performed.
+
+Updated: 2026-07-29 00:46 (Europe/Moscow)
+
+## 2026-07-29 — prod dictionary refresh to `прикладной`
+
+- Completed the full new + legacy production pipeline with
+  `./scripts/rueo_update.sh run-all --last-ru-letter 'прикладной'`.
+- Database safety: both production databases on `firstvds-stage` were
+  classified as persistent. Before mutation, recorded counts and created
+  verified snapshots
+  `/root/rueo_db_preupdate_20260728T213746Z.dump` (14,822,519 bytes,
+  SHA-256
+  `6f1bc77ca0e9ddf041222322d101b2e8899c4149a28627dd984108a6ec04e2da`)
+  and `/root/old_rueo_vortaro_preupdate_20260728T213746Z.sql` (55,570,922
+  bytes, SHA-256
+  `62cf75b42d06b3a772ec7a8be98f614105670e5e41fcf22c4ac233ddff86a9d0`).
+- The first worker attempt failed during local importer bootstrap because the
+  host Python lacked `SQLAlchemy`; no DB mutation, dump, restore, or legacy
+  stage had started. Installed the existing `backend/requirements.txt` into
+  the system Python user site and verified the importer. A detached shell was
+  then reaped during local Esperanto import, still before any production
+  mutation. The durable exec session `41964` completed the full pipeline.
+  Final worker log:
+  `/home/avo/rueo_master/tmp/rueo_update_20260728T214205Z.log`.
+- New PostgreSQL dump:
+  `/home/avo/rueo_master/tmp/rueo_db_20260728T214411Z.dump` (14,703,879
+  bytes, SHA-256
+  `92d1027bc3d03515a0807145a0040b893580659e91cc2998bb5e46790806fc9d`).
+- Legacy backup: `/root/old_rueo_vortaro_20260728T214503Z.sql` (55,570,922
+  bytes, SHA-256
+  `3bb7cceac58bda1708cd242d5fc1146b6a0a82bbdff6c80bd7c6bb1644c3b772`).
+  Test/prod logs are
+  `/var/www/slovari/data/www/updater.rueo.ru/logs/old-rueo-test-20260728T214503Z.log`
+  and
+  `/var/www/slovari/data/www/updater.rueo.ru/logs/old-rueo-prod-20260728T214503Z.log`.
+- Counts after: PostgreSQL `artikoloj=46660`, `artikoloj_ru=58650`,
+  `sercxo=93508`, `sercxo_ru=90314`, `neklaraj=838`; MySQL
+  `artikoloj=46660`, `artikoloj_ru=58650`, `sercxo=93528`,
+  `sercxo_ru=90316`, `neklaraj=838`, `statistiko=279520`. The Russian article
+  count is 8 below the preceding production state in both independent
+  importers and exactly matches the current source output, so this is not a
+  target restore loss. A lower article count is a normal possible source
+  change: the draft contains an automatic inversion of the Esperanto–Russian
+  dictionary, and the author may consolidate many generated draft articles
+  into one edited article. Live `statistiko` was preserved and rose from
+  `279519` to `279520` during verification.
+- Keep two Russian–Esperanto metrics distinct in future reports:
+  `artikoloj_ru=58650` is the total imported table count including generated
+  draft inversions, while Sasha's progress statistic is the ready range shown
+  in the new site's `klarigo.md`. For this update that progress statistic is
+  `32218` ready articles and `52671` words in them; Sasha confirmed that both
+  increased. Future dictionary-update reports should record these ready-range
+  figures separately from database integrity counts.
+- `https://rueo.ru/search?query=прикладной`: HTTP 200, `count=1`, article
+  present. `https://old.rueo.ru/sercxo/прикладной`: HTTP 200, article present.
+  Both `renovigxo` files start with `29 июля 2026 года`.
+- Durable project state:
+  `/home/avo/rueo_master/tmp/rueo_update_active.json` is `completed`. No
+  commit, cron/Gateway change, or unrelated frontend deploy was performed.
+
+Updated: 2026-07-23 02:15 (Europe/Moscow)
+
+## 2026-07-23 — prod dictionary refresh to `прикид`
+
+- Completed the full new + legacy production pipeline with
+  `./scripts/rueo_update.sh run-all --last-ru-letter 'прикид'`.
+- Database safety: both server targets were classified as persistent. Before
+  mutation, recorded PostgreSQL/MySQL counts and created verified snapshots
+  `/root/rueo_db_preupdate_20260722T230814Z.dump` (14,745,643 bytes) and
+  `/root/old_rueo_vortaro_preupdate_20260722T230814Z.sql` (55,400,988 bytes).
+- The first detached attempt, PID `884671`, exited during local sync-in before
+  importer/restore/legacy work or production DB mutation. Recovery confirmed
+  no remaining process; exec session `89711` then completed normally. Worker
+  log: `/home/avo/rueo_master/tmp/rueo_update_20260722T230814Z.log`.
+- New PostgreSQL dump:
+  `/home/avo/rueo_master/tmp/rueo_db_20260722T231224Z.dump` (14,716,476 bytes,
+  SHA-256 `2f44860286205829d7b52c436c71a7440bef1edf1d7ae5010cabab1daffeb95c`).
+- Legacy backup: `/root/old_rueo_vortaro_20260722T231250Z.sql` (55,401,067
+  bytes, SHA-256
+  `f274f2a881103f0a01d9aaf1d690291c182f5fc49f919a7ff2d321c9de77808a`).
+  Test/prod logs end in `old-rueo-test-20260722T231250Z.log` and
+  `old-rueo-prod-20260722T231250Z.log` under the updater log directory.
+- Counts after: PostgreSQL `artikoloj=46658`, `artikoloj_ru=58658`,
+  `sercxo=93499`, `sercxo_ru=90314`, `neklaraj=838`; MySQL
+  `artikoloj=46658`, `artikoloj_ru=58658`, `sercxo=93519`,
+  `sercxo_ru=90316`, `neklaraj=838`. The Russian article count is 10 below the
+  previous run in both independent importers and exactly matches current source
+  output, so it is not an unexplained target loss. Live `statistiko` remained
+  populated and rose from `277383` before to `277384`, then `277385` during
+  verification traffic.
+- `https://rueo.ru/search?query=прикид`: HTTP 200, `count=1`, contains the new
+  article. `https://old.rueo.ru/sercxo/прикид`: HTTP 200 and contains the
+  article. Both `renovigxo` files start with `23 июля 2026 года`.
+- Updated `/home/avo/clawd/.active-task.json` to `completed`. No Gateway/cron
+  change or frontend deploy was performed. This handoff change is uncommitted;
+  the preceding approved commits remain `2a863c6` and `eb646a4`.
+
 Updated: 2026-07-23 02:08 (Europe/Moscow)
 
 ## 2026-07-23 — real Reformal duplicate-link mail handled

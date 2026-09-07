@@ -12,6 +12,7 @@ const routes = [
       { path: 'sercxo', name:'dictionaryEmpty', component: () => import('pages/Index.vue') },
       { path: 'sercxo/:word', name:'dictionary', component: () => import('pages/Index.vue') },
       { path: 'info', name:'team', component: () => import('pages/info.vue') },
+      { path: 'projektoj', name:'projects', component: () => import('pages/projektoj.vue') },
       { path: 'donaci', name:'donate', component: () => import('pages/donaci.vue') },
       { path: 'guglo', name:'search', component: () => import('pages/guglo.vue') },
       { path: 'social', name:'social', component: () => import('pages/social.vue') },

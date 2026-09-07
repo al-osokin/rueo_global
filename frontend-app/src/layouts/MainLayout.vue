@@ -67,6 +67,18 @@
             />
           </q-tabs>
           <q-space />
+          <q-tabs
+            v-if="$q.screen.gt.sm"
+            align="center"
+            class="text-white projects-tab"
+            style="height: 60px"
+          >
+            <q-route-tab
+              :to="{ name: 'projects' }"
+              content-class="my-tab-buttons"
+              label="Проекты"
+            />
+          </q-tabs>
           <q-btn
             v-if="isDark"
             :aria-label="
@@ -174,6 +186,12 @@
           <q-item :to="{ name: 'team' }" active-class="" class="q-pl-none">
             <q-item-section>
               <q-item-label class="q-pl-none">Команда</q-item-label>
+            </q-item-section>
+          </q-item>
+          <q-separator class="q-my-sm" />
+          <q-item :to="{ name: 'projects' }" active-class="" class="q-pl-none">
+            <q-item-section>
+              <q-item-label class="q-pl-none">Проекты</q-item-label>
             </q-item-section>
           </q-item>
           <q-item :to="{ name: 'donate' }" active-class="" class="q-pl-none">
@@ -584,9 +602,11 @@ export default defineComponent({
   align-items: center
   gap: 12px
 .header-tabs
-  flex: 1
-.header-theme-btn
-  margin-left: auto
+  flex: 0 1 auto
+
+.projects-tab
+  flex: 0 0 auto
+  margin-right: 20px
 
 .amoled-toggle-btn
   min-width: 40px
