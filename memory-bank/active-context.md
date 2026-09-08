@@ -1,6 +1,6 @@
 # Active Context — rueo.ru / YouTrack cleanup
 
-Updated: 2026-09-08 02:34 (Europe/Moscow)
+Updated: 2026-09-08 03:08 (Europe/Moscow)
 
 ## 2026-09-08 — branch realignment and friendly projects
 
@@ -22,10 +22,23 @@ Updated: 2026-09-08 02:34 (Europe/Moscow)
   separate Russian and Esperanto descriptions. Desktop, mobile, light, and
   dark layouts were reviewed; targeted ESLint, strict OpenSpec validation, and
   the Quasar PWA build passed.
-- No frontend deployment or database operation was performed. Next: commit and
-  push the accepted Stage I page, fast-forward `master`, then port the same
-  change to `feature/Stage_II` without touching its unrelated working-tree
-  changes.
+- Committed the Stage I page as `698d576`; remote `develop` and `master` were
+  both advanced to it normally. Mirrored it to Stage II as `ac506e2` without
+  touching its unrelated working-tree changes.
+- Removed the temporary `/home/avo/rueo_menu_master` worktree and its local
+  `feature/friendly-projects-page` branch after confirming that all feature
+  files were already preserved in Stage I. The old baseline remains recoverable
+  from the remote archive branch.
+- After Sasha updated the shared `news.md`, bumped both Stage I and Stage II to
+  PWA version `1.1.0` (`941f064` and `939fb67`). Both Quasar PWA builds passed;
+  the Stage I build contained the exact source news hash
+  `694579b406955de7e00d53743371ec531d2e45c9394fae9acbda97ea978d9b0f`,
+  the matching service-worker cache version, and `manifest-1.1.0.json`.
+- Deployed the Stage I PWA to `firstvds-stage` with the standard frontend
+  deploy script after a clean dry run. External HTTP verification returned
+  version `1.1.0`, the exact news hash above, HTTP 200 for `/projektoj`, and the
+  same application shell as `/`. Protected `backend`, `webstat`, and `cgi-bin`
+  directories remained present. No database operation was performed.
 
 ## 2026-09-06 — prod dictionary refresh to `прилечь`
 
