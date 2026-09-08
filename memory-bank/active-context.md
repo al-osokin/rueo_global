@@ -1,6 +1,6 @@
 # Active Context — rueo_global
 
-Updated: 2026-09-08 02:39 (Europe/Moscow)
+Updated: 2026-09-08 03:09 (Europe/Moscow)
 
 ## 2026-09-08 — friendly projects mirrored from Stage I
 
@@ -11,6 +11,10 @@ Updated: 2026-09-08 02:39 (Europe/Moscow)
 - The shared layout and new page match Stage I; the Stage II router retains its
   additional admin routes. Strict OpenSpec validation, targeted ESLint, and
   the Quasar 1.0.8 PWA build passed.
+- Bumped the mirrored Stage II PWA version to `1.1.0` in `939fb67`; its PWA
+  build contains the matching package version, service-worker cache version,
+  and `manifest-1.1.0.json`. This was source synchronization only; Stage II was
+  not deployed.
 - Existing unrelated local work in `frontend-app/src/pages/AdminV4Review.vue`,
   `.learnings/`, and `backend/.env.lmstudio` was not modified or included in
   the feature package. No deployment or database operation was performed.
